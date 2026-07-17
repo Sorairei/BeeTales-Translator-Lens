@@ -39,6 +39,21 @@ class AppSettings:
     history_enabled: bool = False
     persistent_cache_enabled: bool = False
     history_max_entries: int = 1000
+    first_run_completed: bool = False
+    start_minimized: bool = False
+    theme: str = "dark"
+    translation_font_size: int = 10
+    global_hotkeys_enabled: bool = True
+    shortcuts: dict[str, str] = field(
+        default_factory=lambda: {
+            "toggle_visibility": "Ctrl+Shift+T",
+            "pause_resume": "Ctrl+Shift+P",
+            "copy_translation": "Ctrl+Shift+C",
+            "toggle_lock": "Ctrl+Shift+L",
+            "force_read": "Ctrl+Shift+R",
+            "toggle_click_through": "Ctrl+Shift+X",
+        }
+    )
     overlay_locked: bool = False
     auto_detect_language: bool = False
     ocr_model_download_consent: bool = False
@@ -70,6 +85,9 @@ class AppSettings:
             "click_through",
             "history_enabled",
             "persistent_cache_enabled",
+            "first_run_completed",
+            "start_minimized",
+            "global_hotkeys_enabled",
             "overlay_locked",
             "auto_detect_language",
             "ocr_model_download_consent",
@@ -93,6 +111,21 @@ class AppSettings:
 
         if not defaults.history_enabled:
             defaults.persistent_cache_enabled = False
+
+        theme = data.get("theme")
+        if theme in {"dark", "light"}:
+            defaults.theme = theme
+
+        font_size = data.get("translation_font_size")
+        if isinstance(font_size, int) and 8 <= font_size <= 28:
+            defaults.translation_font_size = font_size
+
+        shortcuts = data.get("shortcuts")
+        if isinstance(shortcuts, dict):
+            for action, default_value in defaults.shortcuts.items():
+                value = shortcuts.get(action)
+                if isinstance(value, str) and value.strip():
+                    defaults.shortcuts[action] = value.strip()
 
         for key, allowed in {
             "change_sensitivity": {"low", "normal", "high"},

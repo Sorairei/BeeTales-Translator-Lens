@@ -4,7 +4,7 @@ BeeTales Translator Lens is a privacy-focused Windows desktop application that r
 
 ## Project status
 
-**Phase 5 — Continuous processing** is implemented.
+**Phase 6 — User experience** is implemented.
 
 Available now:
 
@@ -27,6 +27,14 @@ Available now:
 - Continuous-cycle timing, confidence, route, cache hits, average latency, and skipped-busy-tick metrics.
 - Non-blocking rotating error logs that never include recognized or translated text by default.
 - JSON persistence with corrupt-file recovery.
+- First-run language and privacy wizard.
+- Configurable native Windows global shortcuts.
+- Safe lens click-through mode with shortcut, panel, and tray recovery paths.
+- System tray controls and optional tray startup.
+- Dark and light themes, detected-text visibility, and translation font sizing.
+- Translation-history search, copy, deletion, clearing, TXT export, and JSON export.
+- Installed-model management with on-demand route installation and model removal.
+- English Settings and About dialogs.
 
 ## Requirements
 
@@ -54,7 +62,7 @@ Alternatively:
 
 If PowerShell blocks environment activation, run `.\.venv\Scripts\python.exe main.py` directly. The project supports repository paths that contain spaces.
 
-## Using Phase 5
+## Using Phase 6
 
 1. Position and resize the lens over the content to read.
 2. Select a source language, or choose **Automatic** for Lingua detection after OCR.
@@ -65,6 +73,10 @@ If PowerShell blocks environment activation, run `.\.venv\Scripts\python.exe mai
 7. Leave **Save translation history** disabled for memory-only operation, or enable it to store text locally.
 8. Optionally enable **Persistent translation cache** to reuse cached results after restarting. It is available only while history storage is enabled.
 9. Use **Clear saved data** to remove both the saved history and persistent cache.
+10. Open **Settings** to change the theme, translation font, startup behavior, and global shortcuts.
+11. Use **History** to search, copy, delete, clear, or export saved translations.
+12. Use **Models** to inspect installed Argos packages, install a language route, or remove a package.
+13. Enable **Click-through** when you need mouse input to reach the application below the lens. Press **Ctrl+Shift+X**, use the visible panel, or use the tray menu to disable it.
 
 Manual source selection remains preferable for very short messages and gives PaddleOCR the most appropriate recognition model. In Automatic mode, OCR currently begins with the English recognition model and Lingua detects the language from the recognized text.
 
@@ -88,6 +100,19 @@ Only one pipeline cycle can be active. Timer events are discarded while a cycle 
 The selected interval controls how often BeeTales checks the lens. A lightweight grayscale comparison prevents OCR when the frame is static, while periodic forced reads protect against very small changes. If OCR or translation takes longer than the interval, the next timer tick is counted and skipped rather than queued.
 
 The capture preview also reveals diagnostic metrics. These include the most recent stage timings, average complete-cycle time, translation-cache hits, and timer ticks skipped because the pipeline was busy. No image or recognized text is included in these metrics or logs.
+
+## Default global shortcuts
+
+```text
+Ctrl+Shift+T  Show or hide BeeTales
+Ctrl+Shift+P  Pause or resume
+Ctrl+Shift+C  Copy the translation
+Ctrl+Shift+L  Lock or unlock the lens
+Ctrl+Shift+R  Force a new read
+Ctrl+Shift+X  Toggle lens click-through
+```
+
+Shortcuts can be edited or disabled in **Settings**. They are temporarily unregistered while the Settings dialog is open, preventing an edited shortcut from activating an application action.
 
 ## Models, storage, and privacy
 
@@ -120,7 +145,7 @@ python -m pytest
 
 The suite covers settings, geometry, multi-monitor capture, change detection, preprocessing, OCR parsing and caching, language detection, text normalization, direct and pivot route selection, translation caching, history limits and recovery, persistent-cache invalidation, performance counters, Argos translation behavior, and model installation decisions.
 
-## Manual Phase 5 test
+## Manual Phase 6 test
 
 1. Start the application and place the lens over an English sentence.
 2. Select English as the source and Spanish as the target, then press **Start**.
@@ -137,6 +162,14 @@ The suite covers settings, geometry, multi-monitor capture, change detection, pr
 13. Disable history, translate another message, and confirm no new text is written to either persistent file.
 14. Press **Clear saved data** and confirm the history and persistent-cache files are removed.
 15. Disconnect from the network after installing the models and confirm capture, OCR, detection, and translation still work.
+16. Complete the first-run wizard and confirm its language selection is restored after restarting.
+17. Test each global shortcut while another application has focus.
+18. Enable click-through and confirm the underlying application receives mouse input; then recover using the shortcut, panel, and tray menu.
+19. Test tray show/hide, pause/resume, Settings, History, Models, About, and Quit actions.
+20. Switch between dark and light themes, change translation font size, and hide detected text.
+21. Search history, copy and delete one entry, then export TXT and JSON files.
+22. Inspect installed models, install one required route, and remove a disposable model if available.
+23. Enable tray startup, restart, and confirm the application remains accessible from the tray.
 
 ## Repository structure
 
@@ -165,7 +198,7 @@ The importable package is `beetales_translator_lens`. The visible product name r
 3. **Phase 3 — OCR:** complete.
 4. **Phase 4 — Translation:** complete.
 5. **Phase 5 — Continuous processing:** complete.
-6. **Phase 6 — User experience:** first-run wizard, global shortcuts, system tray, click-through mode, and a full model-management interface.
+6. **Phase 6 — User experience:** complete.
 7. **Phase 7 — Distribution:** optimized PyInstaller `onedir` build, metadata, icon, and portable ZIP.
 
 The development environment is intentionally much larger than the final source repository because it includes Python, Qt, PaddlePaddle, Torch-related translation dependencies, language-detection data, and downloaded models. Phase 7 will measure the distributable build and exclude development-only files where compatibility permits.

@@ -7,8 +7,8 @@ import sys
 from time import perf_counter
 
 from PySide6.QtCore import QObject, QPoint, QRect, QThreadPool, QTimer, Qt
-from PySide6.QtGui import QGuiApplication, QImage, QPixmap
-from PySide6.QtWidgets import QApplication, QMessageBox
+from PySide6.QtGui import QAction, QGuiApplication, QImage, QPixmap
+from PySide6.QtWidgets import QApplication, QDialog, QMenu, QMessageBox, QStyle, QSystemTrayIcon
 
 from beetales_translator_lens.capture.change_detector import ChangeDetector
 from beetales_translator_lens.capture.image_preprocessor import ImagePreprocessor
@@ -17,6 +17,7 @@ from beetales_translator_lens.ocr.models import OCRResult
 from beetales_translator_lens.ocr.paddle_engine import PaddleOCREngine
 from beetales_translator_lens.performance import PipelinePerformanceMonitor
 from beetales_translator_lens.platform.windows_capture_exclusion import exclude_window_from_capture
+from beetales_translator_lens.platform.windows_hotkeys import GlobalHotkeyManager
 from beetales_translator_lens.storage.history_store import HistoryStore
 from beetales_translator_lens.storage.settings_store import SettingsStore
 from beetales_translator_lens.storage.translation_cache_store import TranslationCacheStore
@@ -27,6 +28,12 @@ from beetales_translator_lens.translation.models import TranslationResult
 from beetales_translator_lens.translation.route_resolver import TranslationRouteResolver
 from beetales_translator_lens.translation.translation_cache import TranslationCache
 from beetales_translator_lens.ui.capture_overlay import CaptureOverlay
+from beetales_translator_lens.ui.about_dialog import AboutDialog
+from beetales_translator_lens.ui.first_run_wizard import FirstRunWizard
+from beetales_translator_lens.ui.history_dialog import HistoryDialog
+from beetales_translator_lens.ui.model_manager_dialog import ModelManagerDialog
+from beetales_translator_lens.ui.settings_dialog import SettingsDialog
+from beetales_translator_lens.ui.theme import stylesheet
 from beetales_translator_lens.ui.translation_panel import TranslationPanel
 from beetales_translator_lens.workers.capture_worker import CaptureTask, FrameAnalysis
 from beetales_translator_lens.workers.ocr_worker import OCRTask
@@ -72,6 +79,12 @@ class MainController(QObject):
         if self.settings.history_enabled and self.settings.persistent_cache_enabled:
             self.translation_cache.load(self.translation_cache_store.load())
         self.performance = PipelinePerformanceMonitor()
+        self.hotkey_manager = GlobalHotkeyManager()
+        self.hotkey_manager.activated.connect(self._hotkey_activated)
+        if self.hotkey_manager.supported:
+            self.app.installNativeEventFilter(self.hotkey_manager)
+        self.tray_icon: QSystemTrayIcon | None = None
+        self._model_dialog: ModelManagerDialog | None = None
         self.capture_timer = QTimer(self)
         self.capture_timer.setTimerType(Qt.PreciseTimer)
         self.capture_timer.timeout.connect(self.request_capture)
@@ -95,6 +108,7 @@ class MainController(QObject):
         self.panel.start_requested.connect(self.start_capture)
         self.panel.pause_requested.connect(self.toggle_pause)
         self.panel.copy_requested.connect(self.copy_translation)
+        self.panel.copy_original_requested.connect(self.copy_original)
         self.panel.lock_requested.connect(self.toggle_lock)
         self.panel.close_requested.connect(self.close)
         self.panel.language_changed.connect(self._language_changed)
@@ -103,6 +117,12 @@ class MainController(QObject):
         self.panel.clear_requested.connect(self.clear_result)
         self.panel.privacy_settings_changed.connect(self._privacy_settings_changed)
         self.panel.clear_saved_data_requested.connect(self.clear_saved_data)
+        self.panel.settings_requested.connect(self.open_settings)
+        self.panel.history_requested.connect(self.open_history)
+        self.panel.models_requested.connect(self.open_models)
+        self.panel.about_requested.connect(self.open_about)
+        self.panel.click_through_requested.connect(self.toggle_click_through)
+        self.panel.hide_requested.connect(self.hide_windows)
         self.overlay.geometry_changed.connect(self._capture_geometry_changed)
         self.app.aboutToQuit.connect(self.save_settings)
 
@@ -119,7 +139,11 @@ class MainController(QObject):
             self.settings.history_enabled,
             self.settings.persistent_cache_enabled,
         )
+        self.app.setStyleSheet(stylesheet(self.settings.theme))
+        self.panel.set_original_visible(self.settings.show_original_text)
+        self.panel.set_translation_font_size(self.settings.translation_font_size)
         self.overlay.set_locked(self.settings.overlay_locked)
+        self.overlay.set_click_through(self.settings.click_through)
         self.panel.lock_button.setChecked(self.settings.overlay_locked)
         self.panel.lock_button.setText("Unlock lens" if self.settings.overlay_locked else "Lock lens")
 
@@ -134,11 +158,169 @@ class MainController(QObject):
         widget.setGeometry(requested)
 
     def show(self) -> None:
+        first_launch = not self.settings.first_run_completed
+        if first_launch:
+            wizard = FirstRunWizard(self.settings.source_language, self.settings.target_language)
+            if wizard.exec() == QDialog.Accepted:
+                source, target = wizard.selected_languages()
+                if source != "auto" and source == target:
+                    source = "en" if target != "en" else "es"
+                self.settings.source_language = source
+                self.settings.target_language = target
+                self.settings.first_run_completed = True
+                self.panel.select_languages(source, target)
+                self.save_settings()
+        self._setup_tray()
+        self._register_hotkeys()
+        if self.settings.start_minimized and not first_launch and self.tray_icon is not None:
+            self.hide_windows()
+            self.tray_icon.showMessage(APP_NAME, "BeeTales is running in the system tray.")
+        else:
+            self.show_windows()
+
+    def show_windows(self) -> None:
         self.overlay.show()
         self.panel.show()
         self.overlay.raise_()
         self.panel.raise_()
         QTimer.singleShot(0, self._apply_capture_exclusion)
+
+    def hide_windows(self) -> None:
+        self.overlay.hide()
+        self.panel.hide()
+
+    def toggle_visibility(self) -> None:
+        if self.overlay.isVisible() or self.panel.isVisible():
+            self.hide_windows()
+        else:
+            self.show_windows()
+
+    def _setup_tray(self) -> None:
+        if self.tray_icon is not None or not QSystemTrayIcon.isSystemTrayAvailable():
+            return
+        icon = self.app.style().standardIcon(QStyle.SP_ComputerIcon)
+        tray = QSystemTrayIcon(icon, self)
+        tray.setToolTip(APP_NAME)
+        menu = QMenu()
+        actions = (
+            ("Show or hide", self.toggle_visibility),
+            ("Pause or resume", self.toggle_pause),
+            ("Toggle click-through", self.toggle_click_through),
+            ("Settings", self.open_settings),
+            ("Translation history", self.open_history),
+            ("Translation models", self.open_models),
+            ("About", self.open_about),
+            ("Quit", self.close),
+        )
+        for text, callback in actions:
+            action = QAction(text, menu)
+            action.triggered.connect(callback)
+            menu.addAction(action)
+        tray.setContextMenu(menu)
+        tray.activated.connect(
+            lambda reason: self.toggle_visibility()
+            if reason == QSystemTrayIcon.Trigger
+            else None
+        )
+        tray.show()
+        self.tray_icon = tray
+
+    def _register_hotkeys(self) -> None:
+        self.hotkey_manager.unregister_all()
+        if not self.settings.global_hotkeys_enabled:
+            return
+        results = self.hotkey_manager.register(self.settings.shortcuts)
+        failed = [action for action, registered in results.items() if not registered]
+        if self.hotkey_manager.supported and failed:
+            LOGGER.warning("Global shortcuts could not be registered: %s", ", ".join(failed))
+
+    def _hotkey_activated(self, action: str) -> None:
+        callbacks = {
+            "toggle_visibility": self.toggle_visibility,
+            "pause_resume": self.toggle_pause,
+            "copy_translation": self.copy_translation,
+            "toggle_lock": self._hotkey_toggle_lock,
+            "force_read": self._hotkey_force_read,
+            "toggle_click_through": self.toggle_click_through,
+        }
+        callback = callbacks.get(action)
+        if callback:
+            callback()
+
+    def _hotkey_toggle_lock(self) -> None:
+        self.panel.lock_button.setChecked(not self.panel.lock_button.isChecked())
+        self.toggle_lock()
+
+    def _hotkey_force_read(self) -> None:
+        if self._running:
+            self.request_capture(force=True)
+        else:
+            self.start_capture()
+
+    def toggle_click_through(self) -> None:
+        enabled = not self.overlay.is_click_through()
+        self.overlay.set_click_through(enabled)
+        self.settings.click_through = enabled
+        self.panel.set_status(
+            "Click-through enabled; press Ctrl+Shift+X or use the tray to disable it"
+            if enabled
+            else "Click-through disabled"
+        )
+        self.save_settings()
+
+    def open_settings(self) -> None:
+        self.hotkey_manager.unregister_all()
+        dialog = SettingsDialog(self.settings, self.panel)
+        if dialog.exec() != QDialog.Accepted:
+            self._register_hotkeys()
+            return
+        dialog.apply_to(self.settings)
+        self.panel.set_original_visible(self.settings.show_original_text)
+        self.panel.set_translation_font_size(self.settings.translation_font_size)
+        self.app.setStyleSheet(stylesheet(self.settings.theme))
+        self._register_hotkeys()
+        self.save_settings()
+        self.panel.set_status("Settings saved")
+
+    def open_history(self) -> None:
+        HistoryDialog(self.history_store, self.panel).exec()
+
+    def open_models(self) -> None:
+        dialog = ModelManagerDialog(self.model_manager, self.panel)
+        dialog.install_requested.connect(self._install_model_from_dialog)
+        self._model_dialog = dialog
+        dialog.exec()
+        self._model_dialog = None
+
+    def _install_model_from_dialog(self, source: str, target: str) -> None:
+        if self._processing:
+            self.panel.set_status("Wait for the current operation to finish.", paused=True)
+            return
+        self._processing = True
+        self.panel.set_status(f"Installing translation route {source} → {target}…")
+        task = ModelDownloadTask(self.model_manager, source, target)
+        task.signals.progress.connect(self.panel.set_status)
+        if self._model_dialog:
+            task.signals.progress.connect(self._model_dialog.set_status)
+        task.signals.completed.connect(self._manual_model_install_completed)
+        self._active_task = task
+        self.thread_pool.start(task)
+
+    def _manual_model_install_completed(self, result: ModelInstallResult) -> None:
+        self._active_task = None
+        self._processing = False
+        if result.error:
+            self.panel.set_status(result.error, paused=True)
+            if self._model_dialog:
+                self._model_dialog.set_status(result.error, True)
+        else:
+            self.panel.set_status(f"Translation route installed: {' → '.join(result.route)}")
+            if self._model_dialog:
+                self._model_dialog.set_status(f"Installed route: {' → '.join(result.route)}")
+                self._model_dialog.refresh()
+
+    def open_about(self) -> None:
+        AboutDialog(self.panel).exec()
 
     def _apply_capture_exclusion(self) -> None:
         """Use the native API, falling back to brief per-cycle hiding."""
@@ -614,6 +796,14 @@ class MainController(QObject):
         else:
             self.panel.set_status("There is no translation to copy", paused=True)
 
+    def copy_original(self) -> None:
+        text = self.panel.original_text.toPlainText()
+        if text:
+            self.app.clipboard().setText(text)
+            self.panel.set_status("Detected text copied")
+        else:
+            self.panel.set_status("There is no detected text to copy", paused=True)
+
     def toggle_lock(self) -> None:
         locked = self.panel.lock_button.isChecked()
         self.overlay.set_locked(locked)
@@ -675,6 +865,11 @@ class MainController(QObject):
             return
         self._closing = True
         self.capture_timer.stop()
+        self.hotkey_manager.unregister_all()
+        if self.hotkey_manager.supported:
+            self.app.removeNativeEventFilter(self.hotkey_manager)
+        if self.tray_icon is not None:
+            self.tray_icon.hide()
         self.save_settings()
         self.overlay.close()
         self.panel.close()

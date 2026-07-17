@@ -1,4 +1,4 @@
-"""Compact dark theme with a green accent."""
+"""Compact dark and light themes with a green accent."""
 
 APP_STYLESHEET = """
 QWidget {
@@ -39,3 +39,30 @@ QPushButton#closeButton:hover { background-color: #7b3f45; border-color: #aa5960
 QComboBox QAbstractItemView { background-color: #29312c; selection-background-color: #4d7658; }
 QToolTip { background-color: #171c19; color: white; border: 1px solid #53665a; }
 """
+
+LIGHT_STYLESHEET = """
+QWidget { color: #18221b; font-family: "Segoe UI"; font-size: 10pt; }
+QWidget#translationPanel, QWidget#toolbarSurface {
+    background-color: #f2f6f3; border: 1px solid #829789; border-radius: 10px;
+}
+QWidget#titleBar { background-color: #dfe9e2; border-radius: 8px; }
+QLabel#appTitle { font-size: 11pt; font-weight: 600; color: #152219; }
+QLabel#sectionTitle { color: #42624b; font-weight: 600; }
+QLabel#statusActive { color: #287b3f; font-weight: 600; }
+QLabel#statusPaused { color: #9a651c; font-weight: 600; }
+QTextEdit { background-color: white; border: 1px solid #a8b7ad; border-radius: 6px; padding: 7px; }
+QComboBox, QPushButton, QLineEdit, QSpinBox {
+    background-color: #e8efe9; border: 1px solid #96a99b; border-radius: 6px;
+    min-height: 27px; padding: 2px 9px;
+}
+QComboBox:hover, QPushButton:hover { border-color: #4e8d5e; background-color: #dce9df; }
+QPushButton:checked { background-color: #b8d4bf; border-color: #4e8d5e; }
+QPushButton#accentButton { background-color: #5b9368; color: white; font-weight: 600; }
+QPushButton#closeButton { min-width: 28px; max-width: 28px; padding: 1px; }
+QPushButton#closeButton:hover { background-color: #a94e58; color: white; }
+QToolTip { background-color: white; color: #18221b; border: 1px solid #829789; }
+"""
+
+
+def stylesheet(theme: str) -> str:
+    return LIGHT_STYLESHEET if theme == "light" else APP_STYLESHEET

@@ -96,6 +96,18 @@ class HistoryStore:
             if self.path.exists():
                 self.path.unlink()
 
+    def delete(self, timestamp: str) -> bool:
+        with self._lock:
+            entries = self._load_unlocked()
+            retained = [entry for entry in entries if entry.timestamp != timestamp]
+            if len(retained) == len(entries):
+                return False
+            if retained:
+                self._write_unlocked(retained)
+            elif self.path.exists():
+                self.path.unlink()
+            return True
+
     def _load_unlocked(self) -> list[HistoryEntry]:
         if not self.path.exists():
             return []

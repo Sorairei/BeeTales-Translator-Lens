@@ -44,3 +44,14 @@ def test_history_can_be_cleared(tmp_path: Path) -> None:
 
     assert store.load() == []
     assert not store.path.exists()
+
+
+def test_history_entry_can_be_deleted(tmp_path: Path) -> None:
+    store = HistoryStore(tmp_path / "history.json")
+    store.append(_result(1))
+    store.append(_result(2))
+    timestamp = store.load()[0].timestamp
+
+    assert store.delete(timestamp) is True
+    assert [entry.original_text for entry in store.load()] == ["Original 2"]
+    assert store.delete("missing") is False

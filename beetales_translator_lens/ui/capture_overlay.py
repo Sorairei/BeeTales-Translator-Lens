@@ -23,6 +23,7 @@ class CaptureOverlay(QWidget):
         self.setAttribute(Qt.WA_TranslucentBackground)
         self.setMinimumSize(260, 130)
         self._locked = False
+        self._click_through = False
         self._drag_offset: QPoint | None = None
         self._state = LensState.IDLE
 
@@ -42,6 +43,17 @@ class CaptureOverlay(QWidget):
 
     def is_locked(self) -> bool:
         return self._locked
+
+    def set_click_through(self, enabled: bool) -> None:
+        self._click_through = enabled
+        self.setWindowFlag(Qt.WindowTransparentForInput, enabled)
+        self.drag_bar.setVisible(not enabled)
+        self.size_grip.setVisible(not enabled and not self._locked)
+        if self.isVisible():
+            self.show()
+
+    def is_click_through(self) -> bool:
+        return self._click_through
 
     def capture_region(self) -> ScreenRegion:
         """Return only the interior, excluding borders and controls."""

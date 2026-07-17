@@ -146,6 +146,42 @@ def test_history_preferences_are_persisted(tmp_path: Path) -> None:
     assert settings.history_max_entries == 250
 
 
+def test_phase_six_experience_preferences_are_persisted(tmp_path: Path) -> None:
+    path = tmp_path / "settings.json"
+    store = SettingsStore(path)
+    settings = AppSettings(
+        first_run_completed=True,
+        start_minimized=True,
+        theme="light",
+        translation_font_size=15,
+        global_hotkeys_enabled=False,
+    )
+    settings.shortcuts["force_read"] = "F12"
+
+    store.save(settings)
+    loaded = store.load()
+
+    assert loaded.first_run_completed is True
+    assert loaded.start_minimized is True
+    assert loaded.theme == "light"
+    assert loaded.translation_font_size == 15
+    assert loaded.global_hotkeys_enabled is False
+    assert loaded.shortcuts["force_read"] == "F12"
+
+
+def test_invalid_phase_six_preferences_use_defaults(tmp_path: Path) -> None:
+    path = tmp_path / "settings.json"
+    path.write_text(
+        json.dumps({"theme": "blue", "translation_font_size": 100}),
+        encoding="utf-8",
+    )
+
+    loaded = SettingsStore(path).load()
+
+    assert loaded.theme == "dark"
+    assert loaded.translation_font_size == 10
+
+
 def test_corrupt_file_is_backed_up_and_defaults_are_restored(tmp_path: Path) -> None:
     path = tmp_path / "settings.json"
     path.write_text("{not valid json", encoding="utf-8")

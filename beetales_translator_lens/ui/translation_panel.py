@@ -25,6 +25,7 @@ class TranslationPanel(QWidget):
     start_requested = Signal()
     pause_requested = Signal()
     copy_requested = Signal()
+    copy_original_requested = Signal()
     lock_requested = Signal()
     close_requested = Signal()
     language_changed = Signal()
@@ -33,6 +34,12 @@ class TranslationPanel(QWidget):
     clear_requested = Signal()
     privacy_settings_changed = Signal()
     clear_saved_data_requested = Signal()
+    settings_requested = Signal()
+    history_requested = Signal()
+    models_requested = Signal()
+    about_requested = Signal()
+    click_through_requested = Signal()
+    hide_requested = Signal()
 
     def __init__(self) -> None:
         super().__init__()
@@ -115,9 +122,9 @@ class TranslationPanel(QWidget):
         language_layout.addWidget(self.profile_combo, 5, 0, 1, 2)
         root.addLayout(language_layout)
 
-        original_label = QLabel("Detected text:")
-        original_label.setObjectName("sectionTitle")
-        root.addWidget(original_label)
+        self.original_label = QLabel("Detected text:")
+        self.original_label.setObjectName("sectionTitle")
+        root.addWidget(self.original_label)
         self.original_text = QTextEdit()
         self.original_text.setReadOnly(True)
         self.original_text.setPlaceholderText("Recognized text will appear here.")
@@ -138,6 +145,7 @@ class TranslationPanel(QWidget):
         self.pause_button = QPushButton("Pause")
         self.pause_button.setEnabled(False)
         self.copy_button = QPushButton("Copy")
+        self.copy_original_button = QPushButton("Copy original")
         self.clear_button = QPushButton("Clear")
         self.swap_button = QPushButton("Swap")
         self.lock_button = QPushButton("Lock lens")
@@ -148,6 +156,7 @@ class TranslationPanel(QWidget):
             self.start_button,
             self.pause_button,
             self.copy_button,
+            self.copy_original_button,
             self.clear_button,
             self.swap_button,
             self.lock_button,
@@ -157,6 +166,7 @@ class TranslationPanel(QWidget):
         self.start_button.clicked.connect(self.start_requested)
         self.pause_button.clicked.connect(self.pause_requested)
         self.copy_button.clicked.connect(self.copy_requested)
+        self.copy_original_button.clicked.connect(self.copy_original_requested)
         self.clear_button.clicked.connect(self.clear_requested)
         self.swap_button.clicked.connect(self.swap_requested)
         self.lock_button.clicked.connect(self.lock_requested)
@@ -180,6 +190,20 @@ class TranslationPanel(QWidget):
         self.persistent_cache_checkbox.toggled.connect(self.privacy_settings_changed)
         self.clear_saved_data_button.clicked.connect(self.clear_saved_data_requested)
         root.addLayout(privacy_controls)
+
+        experience_controls = QHBoxLayout()
+        for text, signal in (
+            ("Settings", self.settings_requested),
+            ("History", self.history_requested),
+            ("Models", self.models_requested),
+            ("About", self.about_requested),
+            ("Click-through", self.click_through_requested),
+            ("Hide", self.hide_requested),
+        ):
+            button = QPushButton(text)
+            button.clicked.connect(signal)
+            experience_controls.addWidget(button)
+        root.addLayout(experience_controls)
 
         self.preview_label = QLabel("The latest capture will appear here.")
         self.preview_label.setAlignment(Qt.AlignCenter)
@@ -281,6 +305,20 @@ class TranslationPanel(QWidget):
     def clear_result(self) -> None:
         self.original_text.clear()
         self.translated_text.clear()
+
+    def set_original_visible(self, visible: bool) -> None:
+        self.original_label.setVisible(visible)
+        self.original_text.setVisible(visible)
+        self.original_text.setMaximumHeight(75 if visible else 0)
+
+    def set_translation_font_size(self, size: int) -> None:
+        font = self.translated_text.font()
+        font.setPointSize(size)
+        self.translated_text.setFont(font)
+        document_font = self.translated_text.document().defaultFont()
+        document_font.setPointSize(size)
+        self.translated_text.document().setDefaultFont(document_font)
+        self.translated_text.setStyleSheet(f"font-size: {size}pt;")
 
     def mousePressEvent(self, event: QMouseEvent) -> None:
         if event.button() == Qt.LeftButton and self.title_bar.geometry().contains(event.position().toPoint()):
