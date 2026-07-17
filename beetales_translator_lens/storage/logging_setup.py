@@ -11,6 +11,13 @@ from pathlib import Path
 from beetales_translator_lens.storage.paths import ensure_data_directories
 
 
+class PrivacyLogFilter(logging.Filter):
+    """Exclude verbose third-party records that may repeat translated text."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        return record.name.startswith("beetales") or record.levelno >= logging.WARNING
+
+
 @dataclass(slots=True, weakref_slot=True)
 class LogManager:
     listener: logging.handlers.QueueListener
@@ -41,6 +48,7 @@ def configure_logging(log_directory: Path | None = None) -> LogManager:
     stream_handler.setFormatter(formatter)
     log_queue: queue.Queue[logging.LogRecord] = queue.Queue()
     queue_handler = logging.handlers.QueueHandler(log_queue)
+    queue_handler.addFilter(PrivacyLogFilter())
     root = logging.getLogger()
     root.setLevel(logging.INFO)
     root.addHandler(queue_handler)

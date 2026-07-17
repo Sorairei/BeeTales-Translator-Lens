@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QApplication, QComboBox, QLabel, QScrollArea
+from PySide6.QtWidgets import QApplication, QComboBox, QLabel, QSizeGrip, QSplitter, QTabWidget
 
 from beetales_translator_lens.storage.settings_store import AppSettings
 from beetales_translator_lens.ui.about_dialog import AboutDialog
 from beetales_translator_lens.ui.first_run_wizard import FirstRunWizard
+from beetales_translator_lens.ui.instructions_dialog import InstructionsDialog
 from beetales_translator_lens.ui.model_manager_dialog import ModelManagerDialog
 from beetales_translator_lens.ui.settings_dialog import SettingsDialog
 from beetales_translator_lens.ui.theme import APP_STYLESHEET
@@ -33,11 +34,12 @@ def test_translation_panel_controls_do_not_collapse_or_overlap() -> None:
     app.processEvents()
 
     assert panel.windowType() == Qt.WindowType.Window
-    scroll_area = panel.findChild(QScrollArea, "panelScrollArea")
-    assert scroll_area is not None
-    assert scroll_area.horizontalScrollBar().maximum() == 0
-    assert scroll_area.verticalScrollBar().maximum() == 0
-    assert panel.start_button.isVisibleTo(scroll_area.viewport())
+    assert panel.findChild(QSplitter, "textPaneSplitter") is panel.text_splitter
+    assert panel.text_splitter.count() == 2
+    assert all(size > 0 for size in panel.text_splitter.sizes())
+    assert panel.findChild(QSizeGrip, "panelSizeGrip") is panel.size_grip
+    assert panel.start_button.isVisibleTo(panel)
+    assert panel.size_grip.isVisibleTo(panel)
     combos = panel.findChildren(QComboBox)
     assert len(combos) == 5
     assert all(combo.height() >= 27 for combo in combos)
@@ -85,3 +87,20 @@ def test_brand_assets_are_visible_in_panel_and_about_dialog() -> None:
 
     about.close()
     panel.close()
+
+
+def test_instructions_cover_the_complete_workflow() -> None:
+    application()
+    dialog = InstructionsDialog()
+    tabs = dialog.findChild(QTabWidget, "instructionsTabs")
+
+    assert tabs is not None
+    assert tabs.count() == 4
+    assert [tabs.tabText(index) for index in range(tabs.count())] == [
+        "Quick start",
+        "Controls",
+        "Models and privacy",
+        "Troubleshooting",
+    ]
+    assert "Capture interval: 2000 ms" in tabs.widget(0).toPlainText()
+    assert "processed in memory" in tabs.widget(2).toPlainText()

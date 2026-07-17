@@ -10,7 +10,7 @@ $DistPath = Join-Path $ProjectRoot "dist"
 $ReleasePath = Join-Path $ProjectRoot "release"
 $AppDirectory = Join-Path $DistPath "BeeTales Translator Lens"
 $Executable = Join-Path $AppDirectory "BeeTalesTranslatorLens.exe"
-$ZipPath = Join-Path $ReleasePath "BeeTales-Translator-Lens-0.6.2-Windows-x64.zip"
+$ZipPath = Join-Path $ReleasePath "BeeTales-Translator-Lens-0.6.3-Windows-x64.zip"
 
 if (-not (Test-Path -LiteralPath $Python)) {
     throw ".venv was not found. Run scripts\create_venv.ps1 first."

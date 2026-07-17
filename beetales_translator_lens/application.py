@@ -64,7 +64,9 @@ def run_ocr_self_test() -> int:
 
     from beetales_translator_lens.ocr.paddle_engine import PaddleOCREngine
 
-    image = np.full((180, 900, 3), 255, dtype=np.uint8)
+    # Capture preprocessing intentionally produces grayscale images. Keeping
+    # this diagnostic grayscale protects the real screen-capture path.
+    image = np.full((180, 900), 255, dtype=np.uint8)
     cv2.putText(
         image,
         "BEETALES OCR TEST",

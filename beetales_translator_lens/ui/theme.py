@@ -13,7 +13,14 @@ QWidget#translationPanel, QWidget#toolbarSurface {
     border-radius: 10px;
 }
 QWidget#titleBar { background-color: #082b18; border-radius: 8px; }
-QScrollArea#panelScrollArea, QWidget#panelBody { background: transparent; border: none; }
+QWidget#panelBody { background: transparent; border: none; }
+QSplitter::handle { background-color: #4f6b28; border-radius: 3px; }
+QSplitter::handle:hover { background-color: #a8db34; }
+QSizeGrip#panelSizeGrip { width: 18px; height: 18px; }
+QTabWidget::pane { border: 1px solid #4f6b28; border-radius: 6px; }
+QTabBar::tab { background: #1b251d; color: #fff3cf; padding: 7px 12px; }
+QTabBar::tab:selected { background: #526f20; color: #fff8df; }
+QTabBar::tab:hover { background: #26351f; }
 QLabel#appTitle { font-size: 11pt; font-weight: 600; color: #f4f8f5; }
 QLabel#sectionTitle, QLabel#aboutVersion { color: #a8db34; font-weight: 600; }
 QLabel#statusActive { color: #a8db34; font-weight: 600; }
@@ -51,7 +58,14 @@ QWidget#translationPanel, QWidget#toolbarSurface {
     background-color: #fff8df; border: 1px solid #87a33b; border-radius: 10px;
 }
 QWidget#titleBar { background-color: #eaf3bf; border-radius: 8px; }
-QScrollArea#panelScrollArea, QWidget#panelBody { background: transparent; border: none; }
+QWidget#panelBody { background: transparent; border: none; }
+QSplitter::handle { background-color: #9bad62; border-radius: 3px; }
+QSplitter::handle:hover { background-color: #79a51f; }
+QSizeGrip#panelSizeGrip { width: 18px; height: 18px; }
+QTabWidget::pane { border: 1px solid #87a33b; border-radius: 6px; }
+QTabBar::tab { background: #f1f5d9; color: #183018; padding: 7px 12px; }
+QTabBar::tab:selected { background: #d6e6a0; color: #183018; }
+QTabBar::tab:hover { background: #e8f1bd; }
 QLabel#appTitle { font-size: 11pt; font-weight: 600; color: #152219; }
 QLabel#sectionTitle, QLabel#aboutVersion { color: #315d1d; font-weight: 600; }
 QLabel#statusActive { color: #477c1e; font-weight: 600; }

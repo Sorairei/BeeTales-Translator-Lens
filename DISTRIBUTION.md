@@ -6,7 +6,7 @@
 2. In PowerShell, run:
 
    ```powershell
-   Get-FileHash .\BeeTales-Translator-Lens-0.6.2-Windows-x64.zip -Algorithm SHA256
+   Get-FileHash .\BeeTales-Translator-Lens-0.6.3-Windows-x64.zip -Algorithm SHA256
    ```
 
 3. Compare the displayed hash with the value in the `.sha256` file.

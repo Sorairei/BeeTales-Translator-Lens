@@ -13,6 +13,7 @@ from threading import RLock
 from time import perf_counter
 from typing import Any, Callable
 
+import cv2
 import numpy as np
 from numpy.typing import NDArray
 
@@ -103,11 +104,12 @@ class PaddleOCREngine(OCREngine):
         try:
             with self._lock:
                 engine = self._get_engine(language)
+                prepared_image = self._prepare_image(image)
                 if hasattr(engine, "predict"):
-                    raw = engine.predict(np.ascontiguousarray(image))
+                    raw = engine.predict(prepared_image)
                     lines = self._parse_v3_results(raw)
                 elif hasattr(engine, "ocr"):
-                    raw = engine.ocr(np.ascontiguousarray(image), cls=False)
+                    raw = engine.ocr(prepared_image, cls=False)
                     lines = self._parse_legacy_results(raw)
                 else:
                     raise RuntimeError("The PaddleOCR backend has no supported prediction method.")
@@ -130,6 +132,22 @@ class PaddleOCREngine(OCREngine):
 
         with self._lock:
             self._engines.clear()
+
+    @staticmethod
+    def _prepare_image(image: NDArray) -> NDArray[np.uint8]:
+        """Normalize capture output to the three-channel format PaddleOCR expects."""
+
+        if image.ndim == 2:
+            prepared = cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
+        elif image.ndim == 3 and image.shape[2] == 1:
+            prepared = cv2.cvtColor(image[:, :, 0], cv2.COLOR_GRAY2BGR)
+        elif image.ndim == 3 and image.shape[2] == 4:
+            prepared = cv2.cvtColor(image, cv2.COLOR_BGRA2BGR)
+        elif image.ndim == 3 and image.shape[2] == 3:
+            prepared = image
+        else:
+            raise ValueError("The OCR image must be grayscale, BGR, or BGRA.")
+        return np.ascontiguousarray(prepared, dtype=np.uint8)
 
     def _get_engine(self, source_language: str) -> Any:
         backend_language = self.backend_language(source_language)

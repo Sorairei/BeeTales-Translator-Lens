@@ -6,7 +6,7 @@ from enum import StrEnum
 
 APP_NAME = "BeeTales Translator Lens"
 APP_AUTHOR = "BeeTales"
-VERSION = "0.6.2"
+VERSION = "0.6.3"
 
 
 class LensState(StrEnum):

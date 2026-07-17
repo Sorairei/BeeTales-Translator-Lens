@@ -17,6 +17,7 @@ def sample_image() -> np.ndarray:
 class V3Backend:
     def predict(self, image: np.ndarray) -> list[dict[str, object]]:
         assert image.flags.c_contiguous
+        assert image.shape == (80, 160, 3)
         return [
             {
                 "res": {
@@ -52,6 +53,29 @@ def test_v3_results_are_filtered_sorted_and_structured(tmp_path: Path) -> None:
     assert calls[0]["lang"] == "pl"
     assert calls[0]["device"] == "cpu"
     assert calls[0]["enable_mkldnn"] is False
+
+
+def test_grayscale_capture_is_converted_to_three_channels(tmp_path: Path) -> None:
+    engine = PaddleOCREngine(
+        backend_factory=lambda **kwargs: V3Backend(),
+        model_root=tmp_path,
+    )
+
+    result = engine.recognize(np.zeros((80, 160), dtype=np.uint8), "pl")
+
+    assert result.error is None
+    assert result.full_text == "first\nsecond"
+
+
+def test_bgra_capture_is_converted_to_three_channels(tmp_path: Path) -> None:
+    engine = PaddleOCREngine(
+        backend_factory=lambda **kwargs: V3Backend(),
+        model_root=tmp_path,
+    )
+
+    result = engine.recognize(np.zeros((80, 160, 4), dtype=np.uint8), "pl")
+
+    assert result.error is None
 
 
 def test_japanese_uses_official_paddle_language_code(tmp_path: Path) -> None:

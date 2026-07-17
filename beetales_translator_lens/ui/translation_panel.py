@@ -10,9 +10,9 @@ from PySide6.QtWidgets import (
     QGridLayout,
     QHBoxLayout,
     QLabel,
-    QLayout,
     QPushButton,
-    QScrollArea,
+    QSizeGrip,
+    QSplitter,
     QTextEdit,
     QVBoxLayout,
     QWidget,
@@ -41,6 +41,7 @@ class TranslationPanel(QWidget):
     settings_requested = Signal()
     history_requested = Signal()
     models_requested = Signal()
+    instructions_requested = Signal()
     about_requested = Signal()
     click_through_requested = Signal()
     hide_requested = Signal()
@@ -51,7 +52,7 @@ class TranslationPanel(QWidget):
         self.setWindowTitle(APP_NAME)
         self.setWindowFlags(Qt.Window | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
         self.setAttribute(Qt.WA_TranslucentBackground)
-        self.setMinimumSize(520, 420)
+        self.setMinimumSize(560, 600)
         self.setProperty("preferredWidth", 700)
         self.setProperty("preferredHeight", 700)
         self._drag_offset: QPoint | None = None
@@ -87,16 +88,11 @@ class TranslationPanel(QWidget):
         title_layout.addWidget(close)
         root.addWidget(self.title_bar)
 
-        scroll_area = QScrollArea()
-        scroll_area.setObjectName("panelScrollArea")
-        scroll_area.setWidgetResizable(True)
-        scroll_area.setFrameShape(QScrollArea.Shape.NoFrame)
         body = QWidget()
         body.setObjectName("panelBody")
         body_layout = QVBoxLayout(body)
         body_layout.setContentsMargins(0, 0, 0, 0)
         body_layout.setSpacing(8)
-        body_layout.setSizeConstraint(QLayout.SizeConstraint.SetMinimumSize)
 
         language_layout = QGridLayout()
         language_layout.addWidget(QLabel("Source language"), 0, 0)
@@ -151,22 +147,42 @@ class TranslationPanel(QWidget):
         language_layout.addWidget(self.profile_combo, 5, 0, 1, 2)
         body_layout.addLayout(language_layout)
 
+        self.text_splitter = QSplitter(Qt.Orientation.Vertical)
+        self.text_splitter.setObjectName("textPaneSplitter")
+        self.text_splitter.setChildrenCollapsible(False)
+        self.text_splitter.setHandleWidth(8)
+
+        self.original_section = QWidget()
+        original_layout = QVBoxLayout(self.original_section)
+        original_layout.setContentsMargins(0, 0, 0, 0)
+        original_layout.setSpacing(4)
         self.original_label = QLabel("Detected text:")
         self.original_label.setObjectName("sectionTitle")
-        body_layout.addWidget(self.original_label)
+        original_layout.addWidget(self.original_label)
         self.original_text = QTextEdit()
         self.original_text.setReadOnly(True)
         self.original_text.setPlaceholderText("Recognized text will appear here.")
-        self.original_text.setMaximumHeight(75)
-        body_layout.addWidget(self.original_text)
+        self.original_text.setMinimumHeight(70)
+        original_layout.addWidget(self.original_text, 1)
+        self.text_splitter.addWidget(self.original_section)
 
+        translation_section = QWidget()
+        translation_layout = QVBoxLayout(translation_section)
+        translation_layout.setContentsMargins(0, 0, 0, 0)
+        translation_layout.setSpacing(4)
         translation_label = QLabel("Translation:")
         translation_label.setObjectName("sectionTitle")
-        body_layout.addWidget(translation_label)
+        translation_layout.addWidget(translation_label)
         self.translated_text = QTextEdit()
         self.translated_text.setReadOnly(True)
         self.translated_text.setPlaceholderText("The translation will appear here.")
-        body_layout.addWidget(self.translated_text, 1)
+        self.translated_text.setMinimumHeight(70)
+        translation_layout.addWidget(self.translated_text, 1)
+        self.text_splitter.addWidget(translation_section)
+        self.text_splitter.setStretchFactor(0, 1)
+        self.text_splitter.setStretchFactor(1, 2)
+        self.text_splitter.setSizes([120, 220])
+        body_layout.addWidget(self.text_splitter, 1)
 
         controls = QGridLayout()
         self.start_button = QPushButton("Start")
@@ -223,6 +239,7 @@ class TranslationPanel(QWidget):
 
         experience_controls = QGridLayout()
         for index, (text, signal) in enumerate((
+            ("How to use", self.instructions_requested),
             ("Settings", self.settings_requested),
             ("History", self.history_requested),
             ("Models", self.models_requested),
@@ -232,7 +249,7 @@ class TranslationPanel(QWidget):
         )):
             button = QPushButton(text)
             button.clicked.connect(signal)
-            experience_controls.addWidget(button, index // 3, index % 3)
+            experience_controls.addWidget(button, index // 4, index % 4)
         body_layout.addLayout(experience_controls)
 
         self.preview_label = QLabel("The latest capture will appear here.")
@@ -251,8 +268,16 @@ class TranslationPanel(QWidget):
         self.metrics_label.setVisible(False)
         self.preview_button.toggled.connect(self.metrics_label.setVisible)
         body_layout.addWidget(self.metrics_label)
-        scroll_area.setWidget(body)
-        root.addWidget(scroll_area, 1)
+        root.addWidget(body, 1)
+
+        resize_footer = QHBoxLayout()
+        resize_footer.setContentsMargins(0, 0, 0, 0)
+        resize_footer.addStretch()
+        self.size_grip = QSizeGrip(self)
+        self.size_grip.setObjectName("panelSizeGrip")
+        self.size_grip.setToolTip("Drag to resize the window")
+        resize_footer.addWidget(self.size_grip)
+        root.addLayout(resize_footer)
 
     def select_languages(self, source: str, target: str) -> None:
         source_index = self.source_combo.findData(source)
@@ -339,9 +364,7 @@ class TranslationPanel(QWidget):
         self.translated_text.clear()
 
     def set_original_visible(self, visible: bool) -> None:
-        self.original_label.setVisible(visible)
-        self.original_text.setVisible(visible)
-        self.original_text.setMaximumHeight(75 if visible else 0)
+        self.original_section.setVisible(visible)
 
     def set_translation_font_size(self, size: int) -> None:
         font = self.translated_text.font()

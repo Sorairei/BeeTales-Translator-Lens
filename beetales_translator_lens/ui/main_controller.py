@@ -31,6 +31,7 @@ from beetales_translator_lens.ui.capture_overlay import CaptureOverlay
 from beetales_translator_lens.ui.about_dialog import AboutDialog
 from beetales_translator_lens.ui.first_run_wizard import FirstRunWizard
 from beetales_translator_lens.ui.history_dialog import HistoryDialog
+from beetales_translator_lens.ui.instructions_dialog import InstructionsDialog
 from beetales_translator_lens.ui.model_manager_dialog import ModelManagerDialog
 from beetales_translator_lens.ui.settings_dialog import SettingsDialog
 from beetales_translator_lens.ui.theme import stylesheet
@@ -120,6 +121,7 @@ class MainController(QObject):
         self.panel.settings_requested.connect(self.open_settings)
         self.panel.history_requested.connect(self.open_history)
         self.panel.models_requested.connect(self.open_models)
+        self.panel.instructions_requested.connect(self.open_instructions)
         self.panel.about_requested.connect(self.open_about)
         self.panel.click_through_requested.connect(self.toggle_click_through)
         self.panel.hide_requested.connect(self.hide_windows)
@@ -340,6 +342,9 @@ class MainController(QObject):
 
     def open_about(self) -> None:
         AboutDialog(self.panel).exec()
+
+    def open_instructions(self) -> None:
+        InstructionsDialog(self.panel).exec()
 
     def _apply_capture_exclusion(self) -> None:
         """Use the native API, falling back to brief per-cycle hiding."""
