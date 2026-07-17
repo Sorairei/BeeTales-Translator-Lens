@@ -1,0 +1,2 @@
+# Reproducible Windows packaging dependency
+pyinstaller==6.21.0

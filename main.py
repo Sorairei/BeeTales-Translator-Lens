@@ -1,4 +1,4 @@
-"""Punto de entrada de BeeTales Translator Lens."""
+"""BeeTales Translator Lens application entry point."""
 
 from beetales_translator_lens.application import run_application
 

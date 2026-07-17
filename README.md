@@ -4,7 +4,7 @@ BeeTales Translator Lens is a privacy-focused Windows desktop application that r
 
 ## Project status
 
-**Phase 6 — User experience** is implemented.
+**Phase 7 — Distribution** is implemented.
 
 Available now:
 
@@ -35,6 +35,8 @@ Available now:
 - Translation-history search, copy, deletion, clearing, TXT export, and JSON export.
 - Installed-model management with on-demand route installation and model removal.
 - English Settings and About dialogs.
+- Reproducible Windows `onedir` packaging with product metadata and the Translator Lens icon.
+- Portable ZIP delivery with a SHA-256 checksum and bundled offline sentence-splitting models.
 
 ## Requirements
 
@@ -43,6 +45,17 @@ Available now:
 - Administrator privileges are not required.
 
 ## Installation and execution
+
+### Portable Windows package
+
+1. Download `BeeTales-Translator-Lens-0.6.0-Windows-x64.zip` and its `.sha256` file.
+2. Optionally verify the archive with `Get-FileHash .\BeeTales-Translator-Lens-0.6.0-Windows-x64.zip -Algorithm SHA256`.
+3. Extract the complete ZIP to a writable folder.
+4. Run `BeeTalesTranslatorLens.exe` inside the extracted `BeeTales Translator Lens` folder.
+
+Keep the executable beside its `_internal` folder. The package is currently unsigned, so Windows SmartScreen may ask for confirmation. See [DISTRIBUTION.md](DISTRIBUTION.md) for release and troubleshooting details.
+
+### Source installation
 
 Open PowerShell in the repository and run:
 
@@ -62,7 +75,7 @@ Alternatively:
 
 If PowerShell blocks environment activation, run `.\.venv\Scripts\python.exe main.py` directly. The project supports repository paths that contain spaces.
 
-## Using Phase 6
+## Using BeeTales Translator Lens
 
 1. Position and resize the lens over the content to read.
 2. Select a source language, or choose **Automatic** for Lingua detection after OCR.
@@ -145,6 +158,17 @@ python -m pytest
 
 The suite covers settings, geometry, multi-monitor capture, change detection, preprocessing, OCR parsing and caching, language detection, text normalization, direct and pivot route selection, translation caching, history limits and recovery, persistent-cache invalidation, performance counters, Argos translation behavior, and model installation decisions.
 
+## Windows package build
+
+Install the pinned packaging dependency and build the portable release:
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -r requirements-build.txt
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\build_windows.ps1
+```
+
+The script creates the `dist\BeeTales Translator Lens` folder, the versioned ZIP in `release`, and a SHA-256 sidecar. The verified Phase 7 build measures approximately **1.05 GiB extracted** and **450 MiB compressed**. OCR, language detection, Qt, and local inference runtimes account for most of that size; downloaded OCR and translation models remain in the per-user data folder and are not duplicated inside the ZIP.
+
 ## Manual Phase 6 test
 
 1. Start the application and place the lens over an English sentence.
@@ -199,9 +223,9 @@ The importable package is `beetales_translator_lens`. The visible product name r
 4. **Phase 4 — Translation:** complete.
 5. **Phase 5 — Continuous processing:** complete.
 6. **Phase 6 — User experience:** complete.
-7. **Phase 7 — Distribution:** optimized PyInstaller `onedir` build, metadata, icon, and portable ZIP.
+7. **Phase 7 — Distribution:** complete.
 
-The development environment is intentionally much larger than the final source repository because it includes Python, Qt, PaddlePaddle, Torch-related translation dependencies, language-detection data, and downloaded models. Phase 7 will measure the distributable build and exclude development-only files where compatibility permits.
+The development environment is intentionally larger than the final release because it includes Python tooling, test dependencies, caches, temporary build files, and downloaded models. The final package excludes development-only files and optional Torch, Stanza, and SpaCy integrations. The `.venv` and `build` directories can be removed and recreated later; `dist` and `release` contain the usable deliverables.
 
 ## Implementation references
 

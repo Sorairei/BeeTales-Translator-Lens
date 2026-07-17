@@ -5,6 +5,8 @@ from __future__ import annotations
 import importlib.util
 import logging
 import os
+import sys
+import types
 from collections.abc import Iterable, Mapping
 from pathlib import Path
 from threading import RLock
@@ -31,9 +33,25 @@ LOGGER = logging.getLogger(__name__)
 
 
 def _default_backend_factory(**kwargs: Any) -> Any:
+    install_modelscope_compatibility_stub()
     from paddleocr import PaddleOCR
 
     return PaddleOCR(**kwargs)
+
+
+def install_modelscope_compatibility_stub() -> None:
+    """Satisfy PaddleX's unused ModelScope import in compact builds."""
+
+    if "modelscope" in sys.modules or importlib.util.find_spec("modelscope") is not None:
+        return
+
+    modelscope_stub = types.ModuleType("modelscope")
+
+    def unavailable_snapshot_download(*args: object, **kwargs: object) -> None:
+        raise RuntimeError("ModelScope is unavailable; BeeTales uses Hugging Face models.")
+
+    modelscope_stub.snapshot_download = unavailable_snapshot_download
+    sys.modules["modelscope"] = modelscope_stub
 
 
 class PaddleOCREngine(OCREngine):

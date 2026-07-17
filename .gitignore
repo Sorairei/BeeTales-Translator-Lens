@@ -6,19 +6,20 @@ __pycache__/
 .coverage
 htmlcov/
 
-# Entornos y builds
+# Environments and builds
 .venv/
 venv/
 build/
 dist/
+release/
 
-# IDE y sistema
+# IDE and operating system
 .idea/
 .vscode/
 *.swp
 Thumbs.db
 Desktop.ini
 
-# Datos locales y temporales
+# Local and temporary data
 *.log
 debug/
