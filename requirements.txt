@@ -1,0 +1,6 @@
+# Dependencias de ejecución de la Fase 1
+PySide6>=6.7,<7
+platformdirs>=4.2,<5
+
+# Desarrollo y pruebas
+pytest>=8.2,<9

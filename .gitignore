@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Entornos y builds
+.venv/
+venv/
+build/
+dist/
+
+# IDE y sistema
+.idea/
+.vscode/
+*.swp
+Thumbs.db
+Desktop.ini
+
+# Datos locales y temporales
+*.log
+debug/
