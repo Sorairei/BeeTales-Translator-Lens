@@ -83,6 +83,16 @@ def test_manual_capture_interval_is_valid(tmp_path: Path) -> None:
     assert SettingsStore(path).load().capture_interval_ms == 0
 
 
+def test_ocr_download_consent_is_persisted(tmp_path: Path) -> None:
+    path = tmp_path / "settings.json"
+    store = SettingsStore(path)
+    settings = AppSettings(ocr_model_download_consent=True)
+
+    store.save(settings)
+
+    assert store.load().ocr_model_download_consent is True
+
+
 def test_corrupt_file_is_backed_up_and_defaults_are_restored(tmp_path: Path) -> None:
     path = tmp_path / "settings.json"
     path.write_text("{not valid json", encoding="utf-8")

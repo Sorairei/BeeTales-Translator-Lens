@@ -39,6 +39,7 @@ class AppSettings:
     history_enabled: bool = False
     overlay_locked: bool = False
     auto_detect_language: bool = False
+    ocr_model_download_consent: bool = False
     overlay_geometry: dict[str, int] = field(
         default_factory=lambda: _geometry(DEFAULT_OVERLAY_GEOMETRY)
     )
@@ -66,6 +67,7 @@ class AppSettings:
             "history_enabled",
             "overlay_locked",
             "auto_detect_language",
+            "ocr_model_download_consent",
         ):
             value = data.get(key)
             if isinstance(value, bool):

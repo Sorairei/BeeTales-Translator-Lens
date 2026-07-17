@@ -6,16 +6,19 @@ import sys
 
 from PySide6.QtCore import QObject, QPoint, QRect, QThreadPool, QTimer, Qt
 from PySide6.QtGui import QGuiApplication, QImage, QPixmap
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QMessageBox
 
 from beetales_translator_lens.capture.change_detector import ChangeDetector
 from beetales_translator_lens.capture.image_preprocessor import ImagePreprocessor
-from beetales_translator_lens.constants import LensState, SIMULATED_ORIGINAL, SIMULATED_TRANSLATION
+from beetales_translator_lens.constants import APP_NAME, LensState
+from beetales_translator_lens.ocr.models import OCRResult
+from beetales_translator_lens.ocr.paddle_engine import PaddleOCREngine
 from beetales_translator_lens.platform.windows_capture_exclusion import exclude_window_from_capture
 from beetales_translator_lens.storage.settings_store import SettingsStore
 from beetales_translator_lens.ui.capture_overlay import CaptureOverlay
 from beetales_translator_lens.ui.translation_panel import TranslationPanel
 from beetales_translator_lens.workers.capture_worker import CaptureTask, FrameAnalysis
+from beetales_translator_lens.workers.ocr_worker import OCRTask
 
 
 class MainController(QObject):
@@ -31,6 +34,7 @@ class MainController(QObject):
         self.thread_pool = QThreadPool.globalInstance()
         self.detector = ChangeDetector(self.settings.change_sensitivity)
         self.preprocessor = ImagePreprocessor()
+        self.ocr_engine = PaddleOCREngine()
         self.capture_timer = QTimer(self)
         self.capture_timer.setTimerType(Qt.PreciseTimer)
         self.capture_timer.timeout.connect(self.request_capture)
@@ -41,6 +45,7 @@ class MainController(QObject):
         self._capture_exclusion_ok = sys.platform != "win32"
         self._fallback_hidden = False
         self._active_task: CaptureTask | None = None
+        self._latest_analysis: FrameAnalysis | None = None
         self._connect_signals()
         self._restore_settings()
 
@@ -101,6 +106,29 @@ class MainController(QObject):
     def start_capture(self) -> None:
         """Start the cycle or force a read when it is already active."""
 
+        if not self.ocr_engine.is_available():
+            self.panel.set_status(
+                "OCR dependencies are not installed. Run pip install -r requirements.txt.",
+                paused=True,
+            )
+            self.overlay.set_state(LensState.ERROR)
+            return
+        if not self.settings.ocr_model_download_consent:
+            answer = QMessageBox.question(
+                self.panel,
+                APP_NAME,
+                "The first OCR run for each language may download local PaddleOCR models. "
+                "The models can use several hundred megabytes and remain on this computer. "
+                "Continue?",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No,
+            )
+            if answer != QMessageBox.Yes:
+                self.panel.set_status("OCR model download was cancelled.", paused=True)
+                return
+            self.settings.ocr_model_download_consent = True
+            self.save_settings()
+
         already_running = self._running and not self._paused
         self._running = True
         self._paused = False
@@ -153,24 +181,75 @@ class MainController(QObject):
         self.thread_pool.start(task)
 
     def _capture_completed(self, analysis: FrameAnalysis) -> None:
-        self._processing = False
         self._active_task = None
         self._set_overlays_temporarily_hidden(False)
         if self.panel.preview_button.isChecked():
-            self._show_preview(analysis.capture.image)
+            preview = analysis.processed_image if analysis.processed_image is not None else analysis.capture.image
+            self._show_preview(preview)
 
         if analysis.change.changed:
-            # OCR and translation remain simulated until Phases 3 and 4.
-            self.panel.set_simulated_result(SIMULATED_ORIGINAL, SIMULATED_TRANSLATION)
-            suffix = " · forced read" if analysis.change.forced else ""
-            self.panel.set_status(
-                f"Capture updated in {analysis.capture.elapsed_ms:.0f} ms{suffix}"
-            )
+            if analysis.processed_image is None:
+                self._capture_failed("The changed frame could not be preprocessed.")
+                return
+            self._latest_analysis = analysis
+            source_language, _ = self.panel.selected_languages()
+            self.overlay.set_state(LensState.OCR_PROCESSING)
+            if source_language == "auto":
+                self.panel.set_status(
+                    "Recognizing with the English fallback model; automatic detection arrives in Phase 4…"
+                )
+            else:
+                self.panel.set_status("Recognizing text…")
+            task = OCRTask(self.ocr_engine, analysis.processed_image, source_language)
+            task.signals.completed.connect(self._ocr_completed)
+            self._active_task = task  # type: ignore[assignment]
+            self.thread_pool.start(task)
         else:
+            self._processing = False
             self.panel.set_status(
                 f"No changes ({analysis.change.changed_ratio * 100:.1f}%)"
             )
+            self.overlay.set_state(LensState.ACTIVE)
+
+    def _ocr_completed(self, result: OCRResult) -> None:
+        self._processing = False
+        self._active_task = None
+        if self._closing:
+            return
+        analysis = self._latest_analysis
+        if result.error:
+            self.panel.set_status(result.error, paused=True)
+            self.overlay.set_state(LensState.ERROR)
+            self._update_metrics(result, analysis)
+            return
+        if not result.full_text.strip():
+            self.panel.clear_result()
+            self.panel.set_status("No readable text was detected.", paused=True)
+            self.overlay.set_state(LensState.ACTIVE)
+            self._update_metrics(result, analysis)
+            return
+        self.panel.set_detected_text(result.full_text)
+        self.panel.set_status(
+            f"Recognized {len(result.lines)} line(s) · {result.average_confidence:.0%} confidence"
+        )
         self.overlay.set_state(LensState.ACTIVE)
+        self._update_metrics(result, analysis)
+
+    def _update_metrics(
+        self,
+        result: OCRResult,
+        analysis: FrameAnalysis | None,
+    ) -> None:
+        if analysis is None:
+            self.panel.metrics_label.setText(f"OCR: {result.elapsed_ms:.0f} ms")
+            return
+        total = analysis.capture.elapsed_ms + analysis.preprocessing_ms + result.elapsed_ms
+        self.panel.metrics_label.setText(
+            f"Capture: {analysis.capture.elapsed_ms:.0f} ms · "
+            f"Preprocess: {analysis.preprocessing_ms:.0f} ms · "
+            f"OCR: {result.elapsed_ms:.0f} ms · Total: {total:.0f} ms · "
+            f"Confidence: {result.average_confidence:.0%}"
+        )
 
     def _capture_failed(self, message: str) -> None:
         self._processing = False
@@ -191,13 +270,8 @@ class MainController(QObject):
 
     def _show_preview(self, image) -> None:  # type: ignore[no-untyped-def]
         height, width = image.shape[:2]
-        qimage = QImage(
-            image.data,
-            width,
-            height,
-            int(image.strides[0]),
-            QImage.Format_BGR888,
-        ).copy()
+        image_format = QImage.Format_Grayscale8 if image.ndim == 2 else QImage.Format_BGR888
+        qimage = QImage(image.data, width, height, int(image.strides[0]), image_format).copy()
         pixmap = QPixmap.fromImage(qimage).scaled(
             self.panel.preview_label.size(),
             aspectMode=Qt.KeepAspectRatio,
@@ -281,4 +355,5 @@ class MainController(QObject):
         self.panel.close()
         self.thread_pool.clear()
         self.thread_pool.waitForDone(2000)
+        self.ocr_engine.clear()
         self.app.quit()

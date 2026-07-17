@@ -4,7 +4,7 @@ BeeTales Translator Lens is a privacy-focused Windows desktop application that d
 
 ## Project status
 
-**Phase 2 — Regional Capture** is implemented.
+**Phase 3 — Local OCR** is implemented.
 
 Available now:
 
@@ -28,16 +28,20 @@ Available now:
 - JSON persistence for geometry, languages, interval, sensitivity, and lens lock state.
 - Safe recovery and backup of corrupt settings.
 - Initial per-monitor DPI support.
+- A backend-independent `OCREngine` interface and structured OCR results.
+- Lazy local PaddleOCR 3.x integration running on the CPU.
+- English, Spanish, Polish, Portuguese, and horizontal Japanese recognition models.
+- Recognition lines with text, confidence, and polygon coordinates.
+- Reading-order sorting and a 45% minimum confidence threshold.
+- OCR timing, total timing, line count, and average confidence metrics.
+- Per-language pipeline caching so loaded models can be reused.
+- Model storage under the BeeTales per-user data directory.
+- Explicit consent before the first model download.
+- Recoverable dependency, model loading, inference, and empty-result errors.
 
-OCR and translation are still simulated. PaddleOCR arrives in Phase 3 and Argos Translate in Phase 4. When a changed frame is captured, the current demonstration displays:
+OCR now uses the real text under the lens. Translation remains unavailable until Argos Translate is integrated in Phase 4.
 
-```text
-Detected text:
-Czy ktoś chce zagrać dzisiaj?
-
-Translation:
-¿Alguien quiere jugar hoy?
-```
+The first OCR run for each language may download local detection and recognition models. BeeTales asks for consent before starting that download and never uploads captured images.
 
 ## Requirements
 
@@ -72,22 +76,24 @@ Alternatively, from the repository root:
 
 If PowerShell blocks environment activation, execute `.\.venv\Scripts\python.exe main.py` directly instead of changing the system policy.
 
-## Using Phase 2
+## Using Phase 3
 
 1. Drag the small top bar to position the lens above the content you want to capture.
 2. Drag the green bottom-right grip to resize it.
-3. Choose the source and target languages. They are saved now but are not yet used by a real translation engine.
+3. Choose the source language manually for the most accurate OCR model. The target language is saved for Phase 4 translation.
 4. Choose a capture interval, change sensitivity, and image preprocessing profile.
 5. Select **Capture preview** if you want to inspect the latest frame in memory.
-6. Press **Start**. The app captures the lens interior in a background task.
+6. Press **Start** and approve the local model download if prompted. The app captures, preprocesses, and recognizes the lens interior in background tasks.
 7. After starting, **Force read** bypasses the change threshold for one cycle.
 8. Use **Pause** and **Resume** to stop and restart the timer.
 9. Use **Lock lens** to prevent accidental movement and resizing. The panel always remains available to unlock it.
 10. Close the app with `×`. Geometry and capture preferences are restored on the next launch.
 
-The preview is never saved to disk. It exists only in application memory.
+The preview and OCR input are never saved to disk. They exist only in application memory.
 
-## Capture pipeline
+`Automatic` currently uses the English OCR model as a temporary fallback. Full text-language detection is part of Phase 4, so manual source selection is recommended for short messages and for Japanese.
+
+## Capture and OCR pipeline
 
 Phase 2 runs this pipeline:
 
@@ -99,10 +105,12 @@ Calculate the physical lens interior
 → Build a small grayscale thumbnail
 → Compare changed pixels against the selected threshold
 → Preprocess only changed or forced frames
+→ Load or reuse the selected local PaddleOCR pipeline
+→ Recognize text, confidence, and line polygons
 → Update the UI on the Qt main thread
 ```
 
-Only one background capture can be active. If processing takes longer than the selected interval, additional timer events are discarded instead of queued.
+Only one capture/OCR cycle can be active. If processing takes longer than the selected interval, additional timer events are discarded instead of queued. The first model load is slower; subsequent reads reuse the same pipeline.
 
 ## Local data and privacy
 
@@ -118,7 +126,7 @@ Separate directories are reserved for models, cache, logs, history, and debuggin
 python -c "from beetales_translator_lens.storage.paths import data_directory; print(data_directory())"
 ```
 
-BeeTales Translator Lens has no telemetry and makes no network requests while running. Captures are not written to disk. If `settings.json` is corrupt, it is renamed to `settings.corrupt-DATE.json`, and the application continues with safe defaults.
+BeeTales Translator Lens has no telemetry. Captures and recognized text are not written to disk. Network access is used only when PaddleOCR downloads a model after explicit consent. Recognition runs locally afterward. If `settings.json` is corrupt, it is renamed to `settings.corrupt-DATE.json`, and the application continues with safe defaults.
 
 ## Automated tests
 
@@ -138,12 +146,16 @@ The suite covers:
 - Monitor enumeration.
 - Static frames, large changes, manual force, and periodic forced reads.
 - Automatic, unprocessed, and small-text preprocessing behavior.
+- OCR result confidence calculations.
+- PaddleOCR 3.x result parsing, confidence filtering, polygon conversion, and reading order.
+- Japanese language-code mapping and per-language engine caching.
+- Legacy PaddleOCR result compatibility and recoverable backend errors.
 
-## Manual Phase 2 test
+## Manual Phase 3 test
 
 1. Start the app with `python main.py`.
 2. Place the lens over a browser or Discord window and enable **Capture preview**.
-3. Press **Start** and confirm that the preview shows only the lens interior.
+3. Select English, press **Start**, approve the model download, and confirm that recognized text appears without freezing the UI.
 4. Leave the content static and confirm the status changes to `No changes`.
 5. Change the underlying content and confirm that a new frame is accepted.
 6. Press **Force read** and confirm that the status reports a forced read.
@@ -153,7 +165,9 @@ The suite covers:
 10. Move the lens to a secondary monitor, including one positioned to the left of the primary display.
 11. Test Windows scaling at 100%, 125%, 150%, or 200% where available.
 12. Confirm that the lens and panel do not appear in the capture. On systems where Windows rejects capture exclusion, a very brief opacity fallback may be visible.
-13. Restart the application and confirm that geometry, languages, interval, sensitivity, and lock state are restored.
+13. Repeat with Spanish, Polish, Portuguese, and horizontal Japanese text. Each language may require one initial model download.
+14. Enable **Capture preview** and confirm that timing and confidence metrics appear.
+15. Restart the application and confirm that geometry, languages, interval, sensitivity, and lock state are restored.
 
 ## Repository structure
 
@@ -175,6 +189,10 @@ BeeTales Translator Lens/
 │   ├── platform/
 │   │   ├── windows_capture_exclusion.py
 │   │   └── windows_dpi.py
+│   ├── ocr/
+│   │   ├── base.py
+│   │   ├── models.py
+│   │   └── paddle_engine.py
 │   ├── storage/
 │   │   ├── paths.py
 │   │   └── settings_store.py
@@ -184,7 +202,8 @@ BeeTales Translator Lens/
 │   │   ├── theme.py
 │   │   └── translation_panel.py
 │   └── workers/
-│       └── capture_worker.py
+│       ├── capture_worker.py
+│       └── ocr_worker.py
 ├── tests/
 ├── scripts/
 └── packaging/
@@ -196,13 +215,19 @@ The importable package is named `beetales_translator_lens`. The visible product 
 
 1. **Phase 1 — Floating interface:** complete.
 2. **Phase 2 — Regional capture:** complete.
-3. **Phase 3 — OCR:** PaddleOCR, multilingual recognition, confidence, and metrics.
+3. **Phase 3 — OCR:** complete.
 4. **Phase 4 — Translation:** Argos Translate, model management, routes, cache, and language detection.
 5. **Phase 5 — Continuous processing:** full pipeline, performance controls, and optional history.
 6. **Phase 6 — User experience:** first-run wizard, global shortcuts, system tray, click-through mode, and model management.
 7. **Phase 7 — Distribution:** PyInstaller `onedir`, metadata, icon, and portable ZIP.
 
-The included `.spec` file is only a base for Phase 7. Final packaging and PyInstaller are not Phase 2 acceptance requirements.
+The included `.spec` file is only a base for Phase 7. Final packaging and PyInstaller are not Phase 3 acceptance requirements.
+
+## OCR implementation references
+
+- [PaddleOCR 3.x local OCR pipeline](https://www.paddleocr.ai/main/en/version3.x/pipeline_usage/OCR.html)
+- [PaddleOCR supported language codes](https://www.paddleocr.ai/latest/en/version3.x/algorithm/PP-OCRv5/PP-OCRv5_multi_languages.html)
+- [PaddlePaddle CPU installation on Windows](https://www.paddlepaddle.org.cn/documentation/docs/en/install/pip/windows-pip_en.html)
 
 ## License
 

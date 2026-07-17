@@ -19,7 +19,7 @@ from beetales_translator_lens.constants import APP_NAME, SOURCE_LANGUAGES, TARGE
 
 
 class TranslationPanel(QWidget):
-    """Associated panel with functional controls and simulated OCR output."""
+    """Associated panel with capture controls and recognized text output."""
 
     start_requested = Signal()
     pause_requested = Signal()
@@ -161,6 +161,13 @@ class TranslationPanel(QWidget):
         self.preview_button.toggled.connect(self.preview_label.setVisible)
         root.addWidget(self.preview_label)
 
+        self.metrics_label = QLabel()
+        self.metrics_label.setStyleSheet("color: #93a69a; font-size: 9pt;")
+        self.metrics_label.setWordWrap(True)
+        self.metrics_label.setVisible(False)
+        self.preview_button.toggled.connect(self.metrics_label.setVisible)
+        root.addWidget(self.metrics_label)
+
     def select_languages(self, source: str, target: str) -> None:
         source_index = self.source_combo.findData(source)
         target_index = self.target_combo.findData(target)
@@ -199,6 +206,14 @@ class TranslationPanel(QWidget):
     def set_simulated_result(self, original: str, translated: str) -> None:
         self.original_text.setPlainText(original)
         self.translated_text.setPlainText(translated)
+
+    def set_detected_text(self, text: str) -> None:
+        self.original_text.setPlainText(text)
+        self.translated_text.clear()
+
+    def clear_result(self) -> None:
+        self.original_text.clear()
+        self.translated_text.clear()
 
     def mousePressEvent(self, event: QMouseEvent) -> None:
         if event.button() == Qt.LeftButton and self.title_bar.geometry().contains(event.position().toPoint()):
