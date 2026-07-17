@@ -1,4 +1,4 @@
-"""Lupa transparente que define visualmente el área futura de captura."""
+"""Transparent lens that defines the capture area."""
 
 from __future__ import annotations
 
@@ -7,10 +7,12 @@ from PySide6.QtGui import QColor, QMouseEvent, QPaintEvent, QPainter, QPen
 from PySide6.QtWidgets import QLabel, QSizeGrip, QWidget
 
 from beetales_translator_lens.constants import APP_NAME, LensState
+from beetales_translator_lens.capture.screen_region import ScreenRegion
+from beetales_translator_lens.platform.windows_dpi import physical_window_rect
 
 
 class CaptureOverlay(QWidget):
-    """Ventana flotante movible y redimensionable, sin captura en la Fase 1."""
+    """Floating window that outlines the inner capture region."""
 
     geometry_changed = Signal()
 
@@ -29,7 +31,7 @@ class CaptureOverlay(QWidget):
             "background: rgba(32,38,34,225); color: #dce9df; padding: 5px 8px;"
             "border: 1px solid #78ad87; border-radius: 6px; font-weight: 600;"
         )
-        self.drag_bar.setToolTip("Arrastra para mover la lupa")
+        self.drag_bar.setToolTip("Drag to move the lens")
         self.size_grip = QSizeGrip(self)
         self.size_grip.setStyleSheet("background: rgba(92,137,104,190); width: 16px; height: 16px;")
 
@@ -40,6 +42,30 @@ class CaptureOverlay(QWidget):
 
     def is_locked(self) -> bool:
         return self._locked
+
+    def capture_region(self) -> ScreenRegion:
+        """Return only the interior, excluding borders and controls."""
+
+        physical = physical_window_rect(int(self.winId()))
+        ratio = float(self.devicePixelRatioF())
+        if physical is None:
+            global_top_left = self.mapToGlobal(QPoint(0, 0))
+            left = round(global_top_left.x() * ratio)
+            top = round(global_top_left.y() * ratio)
+            width = round(self.width() * ratio)
+            height = round(self.height() * ratio)
+        else:
+            left, top, width, height = physical
+
+        border = max(3, round(4 * ratio))
+        top_controls = max(border, round(48 * ratio))
+        bottom_margin = max(border, round(7 * ratio))
+        return ScreenRegion(
+            left + border,
+            top + top_controls,
+            max(0, width - border * 2),
+            max(0, height - top_controls - bottom_margin),
+        )
 
     def set_state(self, state: LensState) -> None:
         self._state = state

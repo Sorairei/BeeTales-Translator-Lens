@@ -1,4 +1,4 @@
-# Archivo base de PyInstaller para la distribución onedir de una fase posterior.
+# Base PyInstaller file for the future onedir distribution phase.
 from pathlib import Path
 
 project_root = Path(SPECPATH).parent

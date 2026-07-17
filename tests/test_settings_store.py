@@ -1,4 +1,4 @@
-"""Pruebas de persistencia, validación y recuperación de ajustes."""
+"""Settings persistence, validation, and recovery tests."""
 
 from __future__ import annotations
 
@@ -74,6 +74,13 @@ def test_invalid_values_fall_back_without_crashing(tmp_path: Path) -> None:
     assert settings.capture_interval_ms == 750
     assert settings.overlay_locked is False
     assert settings.overlay_geometry == DEFAULT_OVERLAY_GEOMETRY
+
+
+def test_manual_capture_interval_is_valid(tmp_path: Path) -> None:
+    path = tmp_path / "settings.json"
+    path.write_text(json.dumps({"capture_interval_ms": 0}), encoding="utf-8")
+
+    assert SettingsStore(path).load().capture_interval_ms == 0
 
 
 def test_corrupt_file_is_backed_up_and_defaults_are_restored(tmp_path: Path) -> None:

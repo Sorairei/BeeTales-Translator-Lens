@@ -1,4 +1,4 @@
-"""Creación y ejecución de la aplicación Qt."""
+"""Qt application creation and execution."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ from beetales_translator_lens.ui.theme import APP_STYLESHEET
 
 
 def run_application() -> int:
-    """Inicia BeeTales Translator Lens y devuelve el código de salida."""
+    """Start BeeTales Translator Lens and return its exit code."""
 
     enable_dpi_awareness()
     QApplication.setHighDpiScaleFactorRoundingPolicy(Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)
@@ -31,6 +31,6 @@ def run_application() -> int:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     controller = MainController(app, SettingsStore())
     controller.show()
-    # La referencia local debe vivir durante todo el bucle de eventos.
+    # Keep the controller alive for the entire event loop.
     app.setProperty("mainController", controller)
     return app.exec()

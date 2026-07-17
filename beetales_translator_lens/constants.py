@@ -1,4 +1,4 @@
-"""Constantes compartidas por la aplicación."""
+"""Constants shared throughout the application."""
 
 from __future__ import annotations
 
@@ -6,29 +6,30 @@ from enum import StrEnum
 
 APP_NAME = "BeeTales Translator Lens"
 APP_AUTHOR = "BeeTales"
-VERSION = "0.1.0"
+VERSION = "0.2.0"
 
 
 class LensState(StrEnum):
-    """Estados visibles disponibles durante la Fase 1."""
+    """Visual states shown by the capture lens."""
 
-    IDLE = "Esperando texto…"
-    ACTIVE = "Activa"
-    PAUSED = "Pausada"
-    LOCKED = "Bloqueada"
+    IDLE = "Waiting for text…"
+    ACTIVE = "Active"
+    CAPTURING = "Reading…"
+    PAUSED = "Paused"
+    LOCKED = "Locked"
     ERROR = "Error"
 
 
 LANGUAGES: dict[str, str] = {
-    "es": "Español",
-    "en": "Inglés",
-    "pl": "Polaco",
-    "ja": "Japonés",
-    "pt": "Portugués",
+    "es": "Spanish",
+    "en": "English",
+    "pl": "Polish",
+    "ja": "Japanese",
+    "pt": "Portuguese",
 }
 
 SOURCE_LANGUAGES: tuple[tuple[str, str], ...] = (
-    ("auto", "Automático"),
+    ("auto", "Automatic"),
     *tuple(LANGUAGES.items()),
 )
 TARGET_LANGUAGES: tuple[tuple[str, str], ...] = tuple(LANGUAGES.items())

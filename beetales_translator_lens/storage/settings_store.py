@@ -1,4 +1,4 @@
-"""Configuración JSON validada y tolerante a archivos dañados."""
+"""Validated JSON settings with corrupt-file recovery."""
 
 from __future__ import annotations
 
@@ -26,7 +26,7 @@ def _geometry(default: dict[str, int]) -> dict[str, int]:
 
 @dataclass(slots=True)
 class AppSettings:
-    """Preferencias persistentes implementadas durante la Fase 1."""
+    """Persistent application preferences."""
 
     source_language: str = "pl"
     target_language: str = "es"
@@ -48,7 +48,7 @@ class AppSettings:
 
     @classmethod
     def from_mapping(cls, data: dict[str, Any]) -> "AppSettings":
-        """Crea ajustes seguros ignorando claves futuras o desconocidas."""
+        """Create safe settings while ignoring unknown or future keys."""
 
         defaults = cls()
         source = data.get("source_language")
@@ -72,7 +72,7 @@ class AppSettings:
                 setattr(defaults, key, value)
 
         interval = data.get("capture_interval_ms")
-        if isinstance(interval, int) and interval in {250, 500, 750, 1000, 1500, 2000}:
+        if isinstance(interval, int) and interval in {0, 250, 500, 750, 1000, 1500, 2000}:
             defaults.capture_interval_ms = interval
 
         for key, allowed in {
@@ -108,7 +108,7 @@ def _validated_geometry(value: Any, fallback: dict[str, int]) -> dict[str, int]:
 
 
 class SettingsStore:
-    """Carga y guarda ajustes mediante escritura atómica."""
+    """Load and save settings through atomic writes."""
 
     def __init__(self, settings_file: Path | None = None) -> None:
         if settings_file is None:
@@ -121,10 +121,10 @@ class SettingsStore:
         try:
             raw = json.loads(self.path.read_text(encoding="utf-8"))
             if not isinstance(raw, dict):
-                raise ValueError("La raíz de la configuración debe ser un objeto JSON")
+                raise ValueError("The settings root must be a JSON object")
             return AppSettings.from_mapping(raw)
         except (OSError, UnicodeError, json.JSONDecodeError, ValueError) as exc:
-            LOGGER.warning("Configuración dañada; se restauran valores predeterminados: %s", exc)
+            LOGGER.warning("Settings are corrupt; restoring defaults: %s", exc)
             self._backup_corrupt_file()
             return AppSettings()
 
@@ -143,4 +143,4 @@ class SettingsStore:
         try:
             self.path.replace(backup)
         except OSError as exc:
-            LOGGER.error("No se pudo respaldar la configuración dañada: %s", exc)
+            LOGGER.error("Could not back up the corrupt settings file: %s", exc)

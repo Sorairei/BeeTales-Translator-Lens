@@ -1,6 +1,9 @@
-# Dependencias de ejecución de la Fase 1
+# Phase 1 and Phase 2 runtime dependencies
 PySide6>=6.7,<7
 platformdirs>=4.2,<5
+mss>=10,<11
+numpy>=1.26,<3
+opencv-python-headless>=4.10,<5
 
-# Desarrollo y pruebas
+# Development and testing
 pytest>=8.2,<9

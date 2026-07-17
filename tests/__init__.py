@@ -1,1 +1,1 @@
-"""Pruebas automatizadas de BeeTales Translator Lens."""
+"""Automated tests for BeeTales Translator Lens."""

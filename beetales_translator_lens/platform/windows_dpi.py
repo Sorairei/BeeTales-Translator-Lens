@@ -1,16 +1,17 @@
-"""Compatibilidad de escalado DPI para Windows 10 y 11."""
+"""DPI scaling support for Windows 10 and 11."""
 
 from __future__ import annotations
 
 import ctypes
 import logging
 import sys
+from ctypes import wintypes
 
 LOGGER = logging.getLogger(__name__)
 
 
 def enable_dpi_awareness() -> bool:
-    """Activa DPI por monitor usando la mejor API disponible."""
+    """Enable per-monitor DPI awareness through the best available API."""
 
     if sys.platform != "win32":
         return False
@@ -29,5 +30,19 @@ def enable_dpi_awareness() -> bool:
     try:
         return bool(ctypes.windll.user32.SetProcessDPIAware())
     except (AttributeError, OSError) as exc:
-        LOGGER.warning("No se pudo activar la compatibilidad DPI: %s", exc)
+        LOGGER.warning("Could not enable DPI awareness: %s", exc)
         return False
+
+
+def physical_window_rect(window_handle: int) -> tuple[int, int, int, int] | None:
+    """Return the physical rectangle of a DPI-aware Windows window."""
+
+    if sys.platform != "win32" or not window_handle:
+        return None
+    rect = wintypes.RECT()
+    try:
+        if not ctypes.windll.user32.GetWindowRect(wintypes.HWND(window_handle), ctypes.byref(rect)):
+            return None
+    except (AttributeError, OSError, ValueError):
+        return None
+    return rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top

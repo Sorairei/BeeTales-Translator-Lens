@@ -1,1 +1,1 @@
-"""Interfaz gráfica de BeeTales Translator Lens."""
+"""BeeTales Translator Lens user interface."""

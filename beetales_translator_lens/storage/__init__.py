@@ -1,4 +1,4 @@
-"""Persistencia local de la aplicación."""
+"""Local application persistence."""
 
 from .settings_store import AppSettings, SettingsStore
 

@@ -1,9 +1,9 @@
-"""Excepciones propias del proyecto."""
+"""Project-specific exceptions."""
 
 
 class BeeTalesError(Exception):
-    """Error base recuperable de BeeTales Translator Lens."""
+    """Base class for recoverable BeeTales errors."""
 
 
 class SettingsError(BeeTalesError):
-    """La configuración no se pudo leer o guardar."""
+    """Settings could not be loaded or saved."""

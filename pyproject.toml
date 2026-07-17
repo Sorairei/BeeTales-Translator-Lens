@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "beetales-translator-lens"
-version = "0.1.0"
-description = "Lupa flotante local para reconocer y traducir texto en Windows"
+version = "0.2.0"
+description = "Local floating lens for recognizing and translating text on Windows"
 readme = "README.md"
 requires-python = ">=3.11,<3.14"
 license = {file = "LICENSE"}
@@ -13,6 +13,9 @@ authors = [{name = "Sorairei"}]
 dependencies = [
     "PySide6>=6.7,<7",
     "platformdirs>=4.2,<5",
+    "mss>=10,<11",
+    "numpy>=1.26,<3",
+    "opencv-python-headless>=4.10,<5",
 ]
 
 [project.optional-dependencies]

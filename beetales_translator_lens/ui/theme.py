@@ -1,4 +1,4 @@
-"""Tema oscuro compacto con acento verde."""
+"""Compact dark theme with a green accent."""
 
 APP_STYLESHEET = """
 QWidget {

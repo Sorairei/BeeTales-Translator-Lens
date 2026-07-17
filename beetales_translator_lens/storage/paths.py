@@ -1,4 +1,4 @@
-"""Rutas de datos independientes de la ubicación del ejecutable."""
+"""Data paths independent from the executable location."""
 
 from __future__ import annotations
 
@@ -10,13 +10,13 @@ from beetales_translator_lens.constants import APP_AUTHOR, APP_NAME
 
 
 def data_directory() -> Path:
-    """Devuelve la carpeta local de datos del usuario."""
+    """Return the local per-user data directory."""
 
     return Path(user_data_path(APP_NAME, APP_AUTHOR, roaming=False))
 
 
 def ensure_data_directories(root: Path | None = None) -> dict[str, Path]:
-    """Crea las carpetas privadas previstas por la arquitectura."""
+    """Create the private data directories reserved by the architecture."""
 
     base = root or data_directory()
     paths = {name: base / name for name in ("config", "models", "cache", "logs", "history", "debug")}

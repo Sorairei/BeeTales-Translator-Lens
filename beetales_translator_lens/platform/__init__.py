@@ -1,1 +1,1 @@
-"""Integraciones aisladas de la plataforma."""
+"""Isolated platform integrations."""
