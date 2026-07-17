@@ -113,7 +113,7 @@ class PaddleOCREngine(OCREngine):
                     raise RuntimeError("The PaddleOCR backend has no supported prediction method.")
         except Exception as exc:
             LOGGER.exception("Local OCR inference failed for language %s", language)
-            return self._error_result(f"OCR failed: {exc}", language, started)
+            return self._error_result(self._friendly_error(exc), language, started)
 
         lines = [line for line in lines if line.text.strip() and line.confidence >= self.minimum_confidence]
         lines.sort(key=self._reading_order)
@@ -237,6 +237,16 @@ class PaddleOCREngine(OCREngine):
         center_y = round(sum(point[1] for point in line.bounding_box) / len(line.bounding_box))
         left_x = min(point[0] for point in line.bounding_box)
         return (center_y, left_x)
+
+    @staticmethod
+    def _friendly_error(error: Exception) -> str:
+        message = str(error)
+        if "requires additional dependencies" in message.lower():
+            return (
+                "OCR components are incomplete. Reinstall the latest BeeTales "
+                "Translator Lens package."
+            )
+        return f"OCR failed: {message}"
 
     @staticmethod
     def _error_result(message: str, language: str, started: float) -> OCRResult:

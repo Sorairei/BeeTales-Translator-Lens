@@ -5,6 +5,7 @@ mss>=10,<11
 numpy>=1.26,<3
 opencv-contrib-python==4.10.0.84
 paddleocr>=3.3,<4
+paddlex[ocr-core]>=3.3,<4
 paddlepaddle==3.3.0
 argostranslate>=1.9,<2
 lingua-language-detector>=2.1,<3

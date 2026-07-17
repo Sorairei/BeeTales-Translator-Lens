@@ -15,8 +15,8 @@ from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication
 
 from beetales_translator_lens.constants import APP_NAME, VERSION
-from beetales_translator_lens.platform.windows_dpi import enable_dpi_awareness
-from beetales_translator_lens.resources import application_icon_path
+from beetales_translator_lens.platform.windows_dpi import enable_dpi_awareness, set_windows_app_user_model_id
+from beetales_translator_lens.resources import application_icon_path, brand_logo_path, mascot_image_path
 from beetales_translator_lens.storage.logging_setup import configure_logging
 from beetales_translator_lens.storage.settings_store import SettingsStore
 from beetales_translator_lens.ui.main_controller import MainController
@@ -42,21 +42,60 @@ def run_packaging_self_test() -> int:
         "paddle",
         "paddleocr._pipelines.ocr",
         "paddlex.inference.pipelines.ocr",
+        "pyclipper",
+        "pypdfium2",
     ):
         importlib.import_module(module_name)
-    if not application_icon_path().is_file():
-        raise FileNotFoundError("The packaged application icon is missing.")
+    from paddlex.utils.deps import is_extra_available
+
+    if not is_extra_available("ocr-core"):
+        raise RuntimeError("The packaged PaddleX OCR core dependencies are incomplete.")
+    for resource_path in (application_icon_path(), brand_logo_path(), mascot_image_path()):
+        if not resource_path.is_file():
+            raise FileNotFoundError(f"The packaged visual resource is missing: {resource_path.name}")
+    return 0
+
+
+def run_ocr_self_test() -> int:
+    """Recognize generated text with the real local OCR pipeline."""
+
+    import cv2
+    import numpy as np
+
+    from beetales_translator_lens.ocr.paddle_engine import PaddleOCREngine
+
+    image = np.full((180, 900, 3), 255, dtype=np.uint8)
+    cv2.putText(
+        image,
+        "BEETALES OCR TEST",
+        (25, 115),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        2.1,
+        (0, 0, 0),
+        5,
+        cv2.LINE_AA,
+    )
+    result = PaddleOCREngine(minimum_confidence=0.20).recognize(image, "en")
+    if result.error:
+        raise RuntimeError(result.error)
+    if not result.full_text.strip():
+        raise RuntimeError("The real OCR self-test did not recognize any text.")
     return 0
 
 
 def run_application() -> int:
     """Start BeeTales Translator Lens and return its exit code."""
 
-    if "--self-test" in sys.argv:
+    if "--self-test" in sys.argv or "--ocr-self-test" in sys.argv:
         report_path = Path(tempfile.gettempdir()) / "beetales-translator-lens-self-test.log"
         try:
             result = run_packaging_self_test()
-            report_path.write_text("BeeTales packaging self-test passed.\n", encoding="utf-8")
+            if "--ocr-self-test" in sys.argv:
+                result = run_ocr_self_test()
+                message = "BeeTales packaging and real OCR self-tests passed.\n"
+            else:
+                message = "BeeTales packaging self-test passed.\n"
+            report_path.write_text(message, encoding="utf-8")
         except Exception:
             report_path.write_text(traceback.format_exc(), encoding="utf-8")
             result = 1
@@ -65,6 +104,7 @@ def run_application() -> int:
         os._exit(result)
 
     enable_dpi_awareness()
+    set_windows_app_user_model_id("BeeTales.TranslatorLens")
     QApplication.setHighDpiScaleFactorRoundingPolicy(Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)
     app = QApplication(sys.argv)
     app.setApplicationName(APP_NAME)

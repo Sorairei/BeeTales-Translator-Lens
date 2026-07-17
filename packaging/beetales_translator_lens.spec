@@ -9,7 +9,7 @@ project_root = Path(SPECPATH).resolve().parent
 binaries = []
 datas = [
     (
-        str(project_root / "beetales_translator_lens" / "resources" / "icons" / "beetales_translator_lens.png"),
+        str(project_root / "beetales_translator_lens" / "resources" / "icons"),
         "beetales_translator_lens/resources/icons",
     ),
     (
@@ -22,18 +22,36 @@ hiddenimports = []
 for package_name in ("argostranslate", "minisbd", "paddleocr", "paddlex"):
     datas += collect_data_files(package_name)
 
-for package_name in ("argostranslate", "ctranslate2", "lingua-language-detector", "minisbd", "paddleocr", "paddlex"):
+for package_name in (
+    "argostranslate",
+    "ctranslate2",
+    "imagesize",
+    "lingua-language-detector",
+    "minisbd",
+    "opencv-contrib-python",
+    "paddleocr",
+    "paddlex",
+    "pyclipper",
+    "pypdfium2",
+    "python-bidi",
+    "shapely",
+):
     datas += copy_metadata(package_name)
 
 for package_name in ("ctranslate2", "paddle"):
     binaries += collect_dynamic_libs(package_name)
 
 hiddenimports += [
+    "bidi.algorithm",
+    "imagesize",
     "paddleocr._pipelines.ocr",
     "paddlex.inference.pipelines.ocr",
     "paddlex.inference.pipelines.doc_preprocessor",
     "paddlex.inference.models.text_detection",
     "paddlex.inference.models.text_recognition",
+    "pyclipper",
+    "pypdfium2",
+    "shapely",
 ]
 
 a = Analysis(
@@ -55,7 +73,6 @@ a = Analysis(
         "modelscope",
         "notebook",
         "pptx",
-        "pypdfium2",
         "pytest",
         "spacy",
         "stanza",

@@ -10,6 +10,19 @@ from ctypes import wintypes
 LOGGER = logging.getLogger(__name__)
 
 
+def set_windows_app_user_model_id(app_id: str) -> bool:
+    """Give Windows a stable taskbar identity for grouping and icon display."""
+
+    if sys.platform != "win32":
+        return False
+    try:
+        result = ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(app_id)
+        return int(result) == 0
+    except (AttributeError, OSError, ValueError) as exc:
+        LOGGER.warning("Could not set the Windows application identity: %s", exc)
+        return False
+
+
 def enable_dpi_awareness() -> bool:
     """Enable per-monitor DPI awareness through the best available API."""
 

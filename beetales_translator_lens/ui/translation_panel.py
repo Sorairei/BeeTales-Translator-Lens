@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from PySide6.QtCore import QPoint, Qt, Signal
-from PySide6.QtGui import QMouseEvent
+from PySide6.QtGui import QMouseEvent, QPixmap
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
 )
 
 from beetales_translator_lens.constants import APP_NAME, SOURCE_LANGUAGES, TARGET_LANGUAGES
+from beetales_translator_lens.resources import brand_logo_path
 from beetales_translator_lens.ui.widget_helpers import configure_combo_box
 
 
@@ -48,9 +49,11 @@ class TranslationPanel(QWidget):
         super().__init__()
         self.setObjectName("translationPanel")
         self.setWindowTitle(APP_NAME)
-        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool)
+        self.setWindowFlags(Qt.Window | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
         self.setAttribute(Qt.WA_TranslucentBackground)
-        self.setMinimumSize(700, 480)
+        self.setMinimumSize(520, 420)
+        self.setProperty("preferredWidth", 700)
+        self.setProperty("preferredHeight", 700)
         self._drag_offset: QPoint | None = None
         self._build_ui()
 
@@ -63,8 +66,15 @@ class TranslationPanel(QWidget):
         self.title_bar.setObjectName("titleBar")
         title_layout = QHBoxLayout(self.title_bar)
         title_layout.setContentsMargins(9, 4, 5, 4)
-        title = QLabel(APP_NAME)
-        title.setObjectName("appTitle")
+        title = QLabel()
+        title.setObjectName("brandLogo")
+        title.setAccessibleName(APP_NAME)
+        title.setToolTip(APP_NAME)
+        brand_pixmap = QPixmap(str(brand_logo_path())).scaledToHeight(
+            30, Qt.TransformationMode.SmoothTransformation
+        )
+        title.setPixmap(brand_pixmap)
+        title.setFixedSize(brand_pixmap.size())
         self.status_label = QLabel("● Waiting for text…")
         self.status_label.setObjectName("statusActive")
         close = QPushButton("×")
@@ -190,7 +200,7 @@ class TranslationPanel(QWidget):
         self.clear_button.clicked.connect(self.clear_requested)
         self.swap_button.clicked.connect(self.swap_requested)
         self.lock_button.clicked.connect(self.lock_requested)
-        body_layout.addLayout(controls)
+        body_layout.insertLayout(1, controls)
 
         privacy_controls = QGridLayout()
         self.history_checkbox = QCheckBox("Save translation history")
@@ -229,14 +239,14 @@ class TranslationPanel(QWidget):
         self.preview_label.setAlignment(Qt.AlignCenter)
         self.preview_label.setMinimumHeight(100)
         self.preview_label.setStyleSheet(
-            "background: #111612; border: 1px solid #3e4a42; border-radius: 6px; color: #849087;"
+            "background: #090d0b; border: 1px solid #4f6b28; border-radius: 6px; color: #a8b38b;"
         )
         self.preview_label.setVisible(False)
         self.preview_button.toggled.connect(self.preview_label.setVisible)
         body_layout.addWidget(self.preview_label)
 
         self.metrics_label = QLabel()
-        self.metrics_label.setStyleSheet("color: #93a69a; font-size: 9pt;")
+        self.metrics_label.setStyleSheet("color: #b2c77a; font-size: 9pt;")
         self.metrics_label.setWordWrap(True)
         self.metrics_label.setVisible(False)
         self.preview_button.toggled.connect(self.metrics_label.setVisible)

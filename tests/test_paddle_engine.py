@@ -120,6 +120,19 @@ def test_backend_errors_are_returned_not_raised(tmp_path: Path) -> None:
     assert result.error == "OCR failed: model unavailable"
 
 
+def test_missing_ocr_components_have_a_stable_user_message(tmp_path: Path) -> None:
+    def broken_factory(**kwargs: Any) -> object:
+        raise RuntimeError("OCR requires additional dependencies")
+
+    engine = PaddleOCREngine(backend_factory=broken_factory, model_root=tmp_path)
+
+    result = engine.recognize(sample_image(), "pl")
+
+    assert result.error == (
+        "OCR components are incomplete. Reinstall the latest BeeTales Translator Lens package."
+    )
+
+
 def test_empty_image_is_rejected_before_backend_creation(tmp_path: Path) -> None:
     engine = PaddleOCREngine(
         backend_factory=lambda **kwargs: V3Backend(),

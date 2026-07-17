@@ -6,7 +6,7 @@ from enum import StrEnum
 
 APP_NAME = "BeeTales Translator Lens"
 APP_AUTHOR = "BeeTales"
-VERSION = "0.6.1"
+VERSION = "0.6.2"
 
 
 class LensState(StrEnum):
@@ -38,4 +38,4 @@ SOURCE_LANGUAGES: tuple[tuple[str, str], ...] = (
 TARGET_LANGUAGES: tuple[tuple[str, str], ...] = tuple(LANGUAGES.items())
 
 DEFAULT_OVERLAY_GEOMETRY = {"x": 120, "y": 120, "width": 620, "height": 250}
-DEFAULT_PANEL_GEOMETRY = {"x": 120, "y": 180, "width": 700, "height": 560}
+DEFAULT_PANEL_GEOMETRY = {"x": 120, "y": 80, "width": 700, "height": 700}

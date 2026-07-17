@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
-from PySide6.QtWidgets import QApplication, QComboBox, QScrollArea
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QApplication, QComboBox, QLabel, QScrollArea
 
 from beetales_translator_lens.storage.settings_store import AppSettings
+from beetales_translator_lens.ui.about_dialog import AboutDialog
 from beetales_translator_lens.ui.first_run_wizard import FirstRunWizard
 from beetales_translator_lens.ui.model_manager_dialog import ModelManagerDialog
 from beetales_translator_lens.ui.settings_dialog import SettingsDialog
@@ -26,13 +28,16 @@ def application() -> QApplication:
 def test_translation_panel_controls_do_not_collapse_or_overlap() -> None:
     app = application()
     panel = TranslationPanel()
-    panel.resize(panel.minimumSize())
+    panel.resize(int(panel.property("preferredWidth")), int(panel.property("preferredHeight")))
     panel.show()
     app.processEvents()
 
+    assert panel.windowType() == Qt.WindowType.Window
     scroll_area = panel.findChild(QScrollArea, "panelScrollArea")
     assert scroll_area is not None
     assert scroll_area.horizontalScrollBar().maximum() == 0
+    assert scroll_area.verticalScrollBar().maximum() == 0
+    assert panel.start_button.isVisibleTo(scroll_area.viewport())
     combos = panel.findChildren(QComboBox)
     assert len(combos) == 5
     assert all(combo.height() >= 27 for combo in combos)
@@ -61,3 +66,22 @@ def test_all_dialog_drop_downs_reserve_readable_popup_widths() -> None:
         assert all(combo.height() >= 27 for combo in combos)
         assert all(combo.view().minimumWidth() >= combo.minimumWidth() for combo in combos)
         widget.close()
+
+
+def test_brand_assets_are_visible_in_panel_and_about_dialog() -> None:
+    app = application()
+    panel = TranslationPanel()
+    about = AboutDialog()
+    panel.show()
+    about.show()
+    app.processEvents()
+
+    panel_logo = panel.findChild(QLabel, "brandLogo")
+    about_logo = about.findChild(QLabel, "aboutBrandLogo")
+    mascot = about.findChild(QLabel, "aboutMascot")
+    assert panel_logo is not None and not panel_logo.pixmap().isNull()
+    assert about_logo is not None and not about_logo.pixmap().isNull()
+    assert mascot is not None and not mascot.pixmap().isNull()
+
+    about.close()
+    panel.close()

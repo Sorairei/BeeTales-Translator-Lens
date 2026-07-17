@@ -164,6 +164,10 @@ class MainController(QObject):
                     ),
                 )
             area = screen.availableGeometry()
+            preferred_width = int(widget.property("preferredWidth") or widget.minimumWidth())
+            preferred_height = int(widget.property("preferredHeight") or widget.minimumHeight())
+            requested.setWidth(max(requested.width(), min(preferred_width, area.width())))
+            requested.setHeight(max(requested.height(), min(preferred_height, area.height())))
             requested.setWidth(min(requested.width(), area.width()))
             requested.setHeight(min(requested.height(), area.height()))
             maximum_x = area.right() - requested.width() + 1
@@ -485,6 +489,12 @@ class MainController(QObject):
         analysis = self._latest_analysis
         if result.error:
             LOGGER.error("OCR cycle failed: %s", result.error)
+            self.capture_timer.stop()
+            self._running = False
+            self._paused = False
+            self.panel.start_button.setText("Start")
+            self.panel.pause_button.setText("Pause")
+            self.panel.pause_button.setEnabled(False)
             self.panel.set_status(result.error, paused=True)
             self.overlay.set_state(LensState.ERROR)
             self._update_metrics(result, analysis)
