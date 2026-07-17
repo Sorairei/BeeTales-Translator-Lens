@@ -22,6 +22,7 @@
   <img alt="Python 3.11 to 3.13" src="https://img.shields.io/badge/python-3.11%E2%80%933.13-3776AB.svg?logo=python&logoColor=white">
   <a href="LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/license-MIT-2d744a.svg"></a>
   <a href="https://github.com/sponsors/Sorairei"><img alt="GitHub Sponsors" src="https://img.shields.io/badge/sponsor-GitHub%20Sponsors-bf3989.svg?logo=githubsponsors&logoColor=white"></a>
+  <a href="https://github.com/Sorairei/BeeTales-Translator-Lens/actions/workflows/quality.yml"><img alt="Quality checks" src="https://github.com/Sorairei/BeeTales-Translator-Lens/actions/workflows/quality.yml/badge.svg"></a>
 </p>
 
 ## Overview
@@ -254,10 +255,12 @@ Shortcuts can be changed or disabled in **Settings**. The system tray provides a
 Run the automated suite:
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest
+.\scripts\run_tests.ps1
 ```
 
 The tests cover capture geometry, preprocessing, grayscale/BGR/BGRA OCR inputs, OCR result parsing, language detection, text normalization, route selection, translation caching, settings recovery, history limits, privacy filtering, global shortcuts, resizable layouts, brand assets, and the in-app instructions.
+
+Pull requests and pushes to `main` run the same suite on Windows with Python 3.11 and 3.13. The test script keeps Pytest's temporary files inside the ignored repository test directory, which makes local and automated runs independent of the current user's Windows temporary-folder permissions.
 
 Build the Windows release:
 
