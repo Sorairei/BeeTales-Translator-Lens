@@ -93,6 +93,28 @@ def test_ocr_download_consent_is_persisted(tmp_path: Path) -> None:
     assert store.load().ocr_model_download_consent is True
 
 
+def test_translation_preferences_are_persisted(tmp_path: Path) -> None:
+    path = tmp_path / "settings.json"
+    store = SettingsStore(path)
+    settings = AppSettings(
+        preserve_message_prefixes=False,
+        translation_cache_size=750,
+    )
+
+    store.save(settings)
+    actual = store.load()
+
+    assert actual.preserve_message_prefixes is False
+    assert actual.translation_cache_size == 750
+
+
+def test_invalid_translation_cache_size_uses_default(tmp_path: Path) -> None:
+    path = tmp_path / "settings.json"
+    path.write_text(json.dumps({"translation_cache_size": 1}), encoding="utf-8")
+
+    assert SettingsStore(path).load().translation_cache_size == 500
+
+
 def test_corrupt_file_is_backed_up_and_defaults_are_restored(tmp_path: Path) -> None:
     path = tmp_path / "settings.json"
     path.write_text("{not valid json", encoding="utf-8")

@@ -28,6 +28,7 @@ class TranslationPanel(QWidget):
     close_requested = Signal()
     language_changed = Signal()
     capture_settings_changed = Signal()
+    swap_requested = Signal()
 
     def __init__(self) -> None:
         super().__init__()
@@ -133,6 +134,7 @@ class TranslationPanel(QWidget):
         self.pause_button = QPushButton("Pause")
         self.pause_button.setEnabled(False)
         self.copy_button = QPushButton("Copy")
+        self.swap_button = QPushButton("Swap")
         self.lock_button = QPushButton("Lock lens")
         self.lock_button.setCheckable(True)
         self.preview_button = QPushButton("Capture preview")
@@ -141,6 +143,7 @@ class TranslationPanel(QWidget):
             self.start_button,
             self.pause_button,
             self.copy_button,
+            self.swap_button,
             self.lock_button,
             self.preview_button,
         ):
@@ -148,6 +151,7 @@ class TranslationPanel(QWidget):
         self.start_button.clicked.connect(self.start_requested)
         self.pause_button.clicked.connect(self.pause_requested)
         self.copy_button.clicked.connect(self.copy_requested)
+        self.swap_button.clicked.connect(self.swap_requested)
         self.lock_button.clicked.connect(self.lock_requested)
         root.addLayout(controls)
 
@@ -176,6 +180,18 @@ class TranslationPanel(QWidget):
 
     def selected_languages(self) -> tuple[str, str]:
         return str(self.source_combo.currentData()), str(self.target_combo.currentData())
+
+    def swap_languages(self) -> bool:
+        source, target = self.selected_languages()
+        if source == "auto":
+            return False
+        new_source = self.source_combo.findData(target)
+        new_target = self.target_combo.findData(source)
+        if new_source < 0 or new_target < 0:
+            return False
+        self.source_combo.setCurrentIndex(new_source)
+        self.target_combo.setCurrentIndex(new_target)
+        return True
 
     def select_capture_settings(
         self,

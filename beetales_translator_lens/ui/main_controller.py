@@ -1,4 +1,4 @@
-"""Window coordination and Phase 2 regional capture."""
+"""Coordinate the capture, OCR, detection, and local translation pipeline."""
 
 from __future__ import annotations
 
@@ -15,10 +15,22 @@ from beetales_translator_lens.ocr.models import OCRResult
 from beetales_translator_lens.ocr.paddle_engine import PaddleOCREngine
 from beetales_translator_lens.platform.windows_capture_exclusion import exclude_window_from_capture
 from beetales_translator_lens.storage.settings_store import SettingsStore
+from beetales_translator_lens.translation.argos_engine import ArgosTranslationEngine
+from beetales_translator_lens.translation.language_detector import LanguageDetector
+from beetales_translator_lens.translation.model_manager import ArgosModelManager, ModelInstallResult
+from beetales_translator_lens.translation.models import TranslationResult
+from beetales_translator_lens.translation.route_resolver import TranslationRouteResolver
+from beetales_translator_lens.translation.translation_cache import TranslationCache
 from beetales_translator_lens.ui.capture_overlay import CaptureOverlay
 from beetales_translator_lens.ui.translation_panel import TranslationPanel
 from beetales_translator_lens.workers.capture_worker import CaptureTask, FrameAnalysis
 from beetales_translator_lens.workers.ocr_worker import OCRTask
+from beetales_translator_lens.workers.model_download_worker import ModelDownloadTask
+from beetales_translator_lens.workers.translation_worker import (
+    TranslationPreparation,
+    TranslationPreparationTask,
+    TranslationTask,
+)
 
 
 class MainController(QObject):
@@ -35,6 +47,13 @@ class MainController(QObject):
         self.detector = ChangeDetector(self.settings.change_sensitivity)
         self.preprocessor = ImagePreprocessor()
         self.ocr_engine = PaddleOCREngine()
+        self.translation_engine = ArgosTranslationEngine(
+            preserve_message_prefixes=self.settings.preserve_message_prefixes
+        )
+        self.language_detector = LanguageDetector()
+        self.route_resolver = TranslationRouteResolver()
+        self.model_manager = ArgosModelManager(route_resolver=self.route_resolver)
+        self.translation_cache = TranslationCache(self.settings.translation_cache_size)
         self.capture_timer = QTimer(self)
         self.capture_timer.setTimerType(Qt.PreciseTimer)
         self.capture_timer.timeout.connect(self.request_capture)
@@ -44,8 +63,10 @@ class MainController(QObject):
         self._closing = False
         self._capture_exclusion_ok = sys.platform != "win32"
         self._fallback_hidden = False
-        self._active_task: CaptureTask | None = None
+        self._active_task: object | None = None
         self._latest_analysis: FrameAnalysis | None = None
+        self._latest_ocr_result: OCRResult | None = None
+        self._pending_translation: TranslationPreparation | None = None
         self._connect_signals()
         self._restore_settings()
 
@@ -57,6 +78,7 @@ class MainController(QObject):
         self.panel.close_requested.connect(self.close)
         self.panel.language_changed.connect(self._language_changed)
         self.panel.capture_settings_changed.connect(self._capture_settings_changed)
+        self.panel.swap_requested.connect(self.swap_languages)
         self.overlay.geometry_changed.connect(self._capture_geometry_changed)
         self.app.aboutToQuit.connect(self.save_settings)
 
@@ -109,6 +131,20 @@ class MainController(QObject):
         if not self.ocr_engine.is_available():
             self.panel.set_status(
                 "OCR dependencies are not installed. Run pip install -r requirements.txt.",
+                paused=True,
+            )
+            self.overlay.set_state(LensState.ERROR)
+            return
+        if not self.translation_engine.is_available():
+            self.panel.set_status(
+                "Argos Translate is not installed. Run pip install -r requirements.txt.",
+                paused=True,
+            )
+            self.overlay.set_state(LensState.ERROR)
+            return
+        if not self.language_detector.is_available():
+            self.panel.set_status(
+                "Lingua is not installed. Run pip install -r requirements.txt.",
                 paused=True,
             )
             self.overlay.set_state(LensState.ERROR)
@@ -196,13 +232,13 @@ class MainController(QObject):
             self.overlay.set_state(LensState.OCR_PROCESSING)
             if source_language == "auto":
                 self.panel.set_status(
-                    "Recognizing with the English fallback model; automatic detection arrives in Phase 4…"
+                    "Recognizing text before automatic language detection…"
                 )
             else:
                 self.panel.set_status("Recognizing text…")
             task = OCRTask(self.ocr_engine, analysis.processed_image, source_language)
             task.signals.completed.connect(self._ocr_completed)
-            self._active_task = task  # type: ignore[assignment]
+            self._active_task = task
             self.thread_pool.start(task)
         else:
             self._processing = False
@@ -212,7 +248,6 @@ class MainController(QObject):
             self.overlay.set_state(LensState.ACTIVE)
 
     def _ocr_completed(self, result: OCRResult) -> None:
-        self._processing = False
         self._active_task = None
         if self._closing:
             return
@@ -221,19 +256,155 @@ class MainController(QObject):
             self.panel.set_status(result.error, paused=True)
             self.overlay.set_state(LensState.ERROR)
             self._update_metrics(result, analysis)
+            self._processing = False
             return
         if not result.full_text.strip():
             self.panel.clear_result()
             self.panel.set_status("No readable text was detected.", paused=True)
             self.overlay.set_state(LensState.ACTIVE)
             self._update_metrics(result, analysis)
+            self._processing = False
             return
-        self.panel.set_detected_text(result.full_text)
-        self.panel.set_status(
-            f"Recognized {len(result.lines)} line(s) · {result.average_confidence:.0%} confidence"
-        )
-        self.overlay.set_state(LensState.ACTIVE)
+        self._latest_ocr_result = result
         self._update_metrics(result, analysis)
+        selected_source, target = self.panel.selected_languages()
+        self.panel.set_status("Preparing local translation…")
+        task = TranslationPreparationTask(
+            result.full_text,
+            selected_source,
+            target,
+            self.language_detector,
+            self.model_manager,
+            self.route_resolver,
+        )
+        task.signals.completed.connect(self._translation_prepared)
+        self._active_task = task
+        self.thread_pool.start(task)
+
+    def _translation_prepared(self, preparation: TranslationPreparation) -> None:
+        self._active_task = None
+        if self._closing:
+            self._processing = False
+            return
+        self._pending_translation = preparation
+        if preparation.detection is not None:
+            self.panel.metrics_label.setText(
+                f"{self.panel.metrics_label.text()} · Detection: "
+                f"{preparation.detection.elapsed_ms:.0f} ms "
+                f"({preparation.detection.confidence:.0%})"
+            )
+        if preparation.normalized_text:
+            self.panel.set_detected_text(preparation.normalized_text)
+        if preparation.error:
+            self._processing = False
+            self.panel.set_status(preparation.error, paused=True)
+            self.overlay.set_state(LensState.ERROR)
+            return
+        if preparation.source_language is None:
+            self._processing = False
+            self.panel.set_status("The source language could not be resolved.", paused=True)
+            self.overlay.set_state(LensState.ERROR)
+            return
+
+        cached = self.translation_cache.get(
+            preparation.source_language,
+            preparation.target_language,
+            preparation.normalized_text,
+        )
+        if cached is not None:
+            self._processing = False
+            self._display_translation(cached, cached=True)
+            return
+        if preparation.route is not None:
+            self._start_translation(preparation.normalized_text, preparation.route)
+            return
+
+        self._processing = False
+        self.overlay.set_state(LensState.ERROR)
+        answer = QMessageBox.question(
+            self.panel,
+            APP_NAME,
+            f"No local model route is installed for {preparation.source_language} → "
+            f"{preparation.target_language}. Download and install the required Argos model(s) now?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        if answer != QMessageBox.Yes:
+            self.panel.set_status(
+                f"Model not installed for {preparation.source_language} → {preparation.target_language}.",
+                paused=True,
+            )
+            return
+        self._processing = True
+        self.overlay.set_state(LensState.DOWNLOADING_MODEL)
+        self.panel.set_status("Checking available translation models…")
+        task = ModelDownloadTask(
+            self.model_manager,
+            preparation.source_language,
+            preparation.target_language,
+        )
+        task.signals.progress.connect(self.panel.set_status)
+        task.signals.completed.connect(self._model_download_completed)
+        self._active_task = task
+        self.thread_pool.start(task)
+
+    def _model_download_completed(self, result: ModelInstallResult) -> None:
+        self._active_task = None
+        if self._closing:
+            self._processing = False
+            return
+        if result.error:
+            self._processing = False
+            self.panel.set_status(result.error, paused=True)
+            self.overlay.set_state(LensState.ERROR)
+            return
+        preparation = self._pending_translation
+        if preparation is None or not result.route:
+            self._processing = False
+            self.panel.set_status("The translation model was installed, but no route was returned.", paused=True)
+            self.overlay.set_state(LensState.ERROR)
+            return
+        self._start_translation(preparation.normalized_text, result.route)
+
+    def _start_translation(self, text: str, route: list[str]) -> None:
+        self._processing = True
+        self.overlay.set_state(LensState.TRANSLATING)
+        route_text = " → ".join(route)
+        self.panel.set_status(f"Translating locally via {route_text}…")
+        task = TranslationTask(self.translation_engine, text, route)
+        task.signals.completed.connect(self._translation_completed)
+        self._active_task = task
+        self.thread_pool.start(task)
+
+    def _translation_completed(self, result: TranslationResult) -> None:
+        self._processing = False
+        self._active_task = None
+        if self._closing:
+            return
+        if result.error:
+            self.panel.set_status(result.error, paused=True)
+            self.overlay.set_state(LensState.ERROR)
+            return
+        self.translation_cache.put(result)
+        self._display_translation(result)
+
+    def _display_translation(self, result: TranslationResult, *, cached: bool = False) -> None:
+        self.panel.original_text.setPlainText(result.original_text)
+        self.panel.translated_text.setPlainText(result.translated_text)
+        pivot = len(result.route) > 2
+        if cached:
+            status = "Translation loaded from session cache"
+        elif pivot:
+            status = "Translation completed through English"
+        else:
+            status = "Translation completed locally"
+        self.panel.set_status(f"{status} · {result.elapsed_ms:.0f} ms")
+        self.overlay.set_state(LensState.ACTIVE)
+        if self._latest_ocr_result is not None:
+            current = self.panel.metrics_label.text()
+            self.panel.metrics_label.setText(
+                f"{current} · Translation: {result.elapsed_ms:.0f} ms · Route: {' → '.join(result.route)}"
+            )
 
     def _update_metrics(
         self,
@@ -313,6 +484,17 @@ class MainController(QObject):
         source, target = self.panel.selected_languages()
         if source != "auto" and source == target:
             self.panel.set_status("Choose two different languages", paused=True)
+            return
+        if self._running and not self._processing:
+            self.request_capture(force=True)
+
+    def swap_languages(self) -> None:
+        if not self.panel.swap_languages():
+            self.panel.set_status("Automatic source language cannot be swapped.", paused=True)
+            return
+        self.panel.set_status("Languages swapped")
+        if self._running and not self._processing:
+            self.request_capture(force=True)
 
     def _capture_settings_changed(self) -> None:
         interval, sensitivity, profile = self.panel.selected_capture_settings()
@@ -356,4 +538,5 @@ class MainController(QObject):
         self.thread_pool.clear()
         self.thread_pool.waitForDone(2000)
         self.ocr_engine.clear()
+        self.translation_cache.clear()
         self.app.quit()

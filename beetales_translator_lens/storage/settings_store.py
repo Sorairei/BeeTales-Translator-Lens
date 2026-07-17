@@ -40,6 +40,8 @@ class AppSettings:
     overlay_locked: bool = False
     auto_detect_language: bool = False
     ocr_model_download_consent: bool = False
+    preserve_message_prefixes: bool = True
+    translation_cache_size: int = 500
     overlay_geometry: dict[str, int] = field(
         default_factory=lambda: _geometry(DEFAULT_OVERLAY_GEOMETRY)
     )
@@ -68,6 +70,7 @@ class AppSettings:
             "overlay_locked",
             "auto_detect_language",
             "ocr_model_download_consent",
+            "preserve_message_prefixes",
         ):
             value = data.get(key)
             if isinstance(value, bool):
@@ -76,6 +79,10 @@ class AppSettings:
         interval = data.get("capture_interval_ms")
         if isinstance(interval, int) and interval in {0, 250, 500, 750, 1000, 1500, 2000}:
             defaults.capture_interval_ms = interval
+
+        cache_size = data.get("translation_cache_size")
+        if isinstance(cache_size, int) and 10 <= cache_size <= 10_000:
+            defaults.translation_cache_size = cache_size
 
         for key, allowed in {
             "change_sensitivity": {"low", "normal", "high"},
