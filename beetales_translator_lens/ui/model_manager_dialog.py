@@ -7,6 +7,7 @@ from PySide6.QtWidgets import (
 
 from beetales_translator_lens.constants import TARGET_LANGUAGES
 from beetales_translator_lens.translation.model_manager import ArgosModelManager
+from beetales_translator_lens.ui.widget_helpers import configure_combo_box
 
 
 class ModelManagerDialog(QDialog):
@@ -30,6 +31,8 @@ class ModelManagerDialog(QDialog):
         for code, name in TARGET_LANGUAGES:
             self.source.addItem(name, code)
             self.target.addItem(name, code)
+        configure_combo_box(self.source, minimum_width=150)
+        configure_combo_box(self.target, minimum_width=150)
         route.addWidget(self.source)
         route.addWidget(QLabel("→"))
         route.addWidget(self.target)

@@ -10,13 +10,16 @@ from PySide6.QtWidgets import (
     QGridLayout,
     QHBoxLayout,
     QLabel,
+    QLayout,
     QPushButton,
+    QScrollArea,
     QTextEdit,
     QVBoxLayout,
     QWidget,
 )
 
 from beetales_translator_lens.constants import APP_NAME, SOURCE_LANGUAGES, TARGET_LANGUAGES
+from beetales_translator_lens.ui.widget_helpers import configure_combo_box
 
 
 class TranslationPanel(QWidget):
@@ -47,7 +50,7 @@ class TranslationPanel(QWidget):
         self.setWindowTitle(APP_NAME)
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool)
         self.setAttribute(Qt.WA_TranslucentBackground)
-        self.setMinimumSize(480, 330)
+        self.setMinimumSize(700, 480)
         self._drag_offset: QPoint | None = None
         self._build_ui()
 
@@ -74,6 +77,17 @@ class TranslationPanel(QWidget):
         title_layout.addWidget(close)
         root.addWidget(self.title_bar)
 
+        scroll_area = QScrollArea()
+        scroll_area.setObjectName("panelScrollArea")
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setFrameShape(QScrollArea.Shape.NoFrame)
+        body = QWidget()
+        body.setObjectName("panelBody")
+        body_layout = QVBoxLayout(body)
+        body_layout.setContentsMargins(0, 0, 0, 0)
+        body_layout.setSpacing(8)
+        body_layout.setSizeConstraint(QLayout.SizeConstraint.SetMinimumSize)
+
         language_layout = QGridLayout()
         language_layout.addWidget(QLabel("Source language"), 0, 0)
         language_layout.addWidget(QLabel("Target language"), 0, 1)
@@ -83,6 +97,8 @@ class TranslationPanel(QWidget):
             self.source_combo.addItem(label, code)
         for code, label in TARGET_LANGUAGES:
             self.target_combo.addItem(label, code)
+        configure_combo_box(self.source_combo, minimum_width=180)
+        configure_combo_box(self.target_combo, minimum_width=180)
         self.source_combo.currentIndexChanged.connect(self.language_changed)
         self.target_combo.currentIndexChanged.connect(self.language_changed)
         language_layout.addWidget(self.source_combo, 1, 0)
@@ -103,6 +119,8 @@ class TranslationPanel(QWidget):
         self.sensitivity_combo = QComboBox()
         for value, label in (("low", "Low"), ("normal", "Normal"), ("high", "High")):
             self.sensitivity_combo.addItem(label, value)
+        configure_combo_box(self.interval_combo, minimum_width=180)
+        configure_combo_box(self.sensitivity_combo, minimum_width=180)
         self.interval_combo.currentIndexChanged.connect(self.capture_settings_changed)
         self.sensitivity_combo.currentIndexChanged.connect(self.capture_settings_changed)
         language_layout.addWidget(self.interval_combo, 3, 0)
@@ -118,28 +136,29 @@ class TranslationPanel(QWidget):
             ("none", "No preprocessing"),
         ):
             self.profile_combo.addItem(label, value)
+        configure_combo_box(self.profile_combo, minimum_width=260, popup_width=300)
         self.profile_combo.currentIndexChanged.connect(self.capture_settings_changed)
         language_layout.addWidget(self.profile_combo, 5, 0, 1, 2)
-        root.addLayout(language_layout)
+        body_layout.addLayout(language_layout)
 
         self.original_label = QLabel("Detected text:")
         self.original_label.setObjectName("sectionTitle")
-        root.addWidget(self.original_label)
+        body_layout.addWidget(self.original_label)
         self.original_text = QTextEdit()
         self.original_text.setReadOnly(True)
         self.original_text.setPlaceholderText("Recognized text will appear here.")
         self.original_text.setMaximumHeight(75)
-        root.addWidget(self.original_text)
+        body_layout.addWidget(self.original_text)
 
         translation_label = QLabel("Translation:")
         translation_label.setObjectName("sectionTitle")
-        root.addWidget(translation_label)
+        body_layout.addWidget(translation_label)
         self.translated_text = QTextEdit()
         self.translated_text.setReadOnly(True)
         self.translated_text.setPlaceholderText("The translation will appear here.")
-        root.addWidget(self.translated_text, 1)
+        body_layout.addWidget(self.translated_text, 1)
 
-        controls = QHBoxLayout()
+        controls = QGridLayout()
         self.start_button = QPushButton("Start")
         self.start_button.setObjectName("accentButton")
         self.pause_button = QPushButton("Pause")
@@ -152,7 +171,7 @@ class TranslationPanel(QWidget):
         self.lock_button.setCheckable(True)
         self.preview_button = QPushButton("Capture preview")
         self.preview_button.setCheckable(True)
-        for button in (
+        primary_buttons = (
             self.start_button,
             self.pause_button,
             self.copy_button,
@@ -161,8 +180,9 @@ class TranslationPanel(QWidget):
             self.swap_button,
             self.lock_button,
             self.preview_button,
-        ):
-            controls.addWidget(button)
+        )
+        for index, button in enumerate(primary_buttons):
+            controls.addWidget(button, index // 4, index % 4)
         self.start_button.clicked.connect(self.start_requested)
         self.pause_button.clicked.connect(self.pause_requested)
         self.copy_button.clicked.connect(self.copy_requested)
@@ -170,9 +190,9 @@ class TranslationPanel(QWidget):
         self.clear_button.clicked.connect(self.clear_requested)
         self.swap_button.clicked.connect(self.swap_requested)
         self.lock_button.clicked.connect(self.lock_requested)
-        root.addLayout(controls)
+        body_layout.addLayout(controls)
 
-        privacy_controls = QHBoxLayout()
+        privacy_controls = QGridLayout()
         self.history_checkbox = QCheckBox("Save translation history")
         self.history_checkbox.setToolTip(
             "Store original and translated text locally. Captured images are never saved."
@@ -182,28 +202,28 @@ class TranslationPanel(QWidget):
             "Reuse translations after restarting. This requires translation history to be enabled."
         )
         self.clear_saved_data_button = QPushButton("Clear saved data")
-        privacy_controls.addWidget(self.history_checkbox)
-        privacy_controls.addWidget(self.persistent_cache_checkbox)
-        privacy_controls.addStretch()
-        privacy_controls.addWidget(self.clear_saved_data_button)
+        privacy_controls.addWidget(self.history_checkbox, 0, 0)
+        privacy_controls.addWidget(self.persistent_cache_checkbox, 1, 0)
+        privacy_controls.addWidget(self.clear_saved_data_button, 0, 1, 2, 1)
+        privacy_controls.setColumnStretch(0, 1)
         self.history_checkbox.toggled.connect(self._history_toggled)
         self.persistent_cache_checkbox.toggled.connect(self.privacy_settings_changed)
         self.clear_saved_data_button.clicked.connect(self.clear_saved_data_requested)
-        root.addLayout(privacy_controls)
+        body_layout.addLayout(privacy_controls)
 
-        experience_controls = QHBoxLayout()
-        for text, signal in (
+        experience_controls = QGridLayout()
+        for index, (text, signal) in enumerate((
             ("Settings", self.settings_requested),
             ("History", self.history_requested),
             ("Models", self.models_requested),
             ("About", self.about_requested),
             ("Click-through", self.click_through_requested),
             ("Hide", self.hide_requested),
-        ):
+        )):
             button = QPushButton(text)
             button.clicked.connect(signal)
-            experience_controls.addWidget(button)
-        root.addLayout(experience_controls)
+            experience_controls.addWidget(button, index // 3, index % 3)
+        body_layout.addLayout(experience_controls)
 
         self.preview_label = QLabel("The latest capture will appear here.")
         self.preview_label.setAlignment(Qt.AlignCenter)
@@ -213,14 +233,16 @@ class TranslationPanel(QWidget):
         )
         self.preview_label.setVisible(False)
         self.preview_button.toggled.connect(self.preview_label.setVisible)
-        root.addWidget(self.preview_label)
+        body_layout.addWidget(self.preview_label)
 
         self.metrics_label = QLabel()
         self.metrics_label.setStyleSheet("color: #93a69a; font-size: 9pt;")
         self.metrics_label.setWordWrap(True)
         self.metrics_label.setVisible(False)
         self.preview_button.toggled.connect(self.metrics_label.setVisible)
-        root.addWidget(self.metrics_label)
+        body_layout.addWidget(self.metrics_label)
+        scroll_area.setWidget(body)
+        root.addWidget(scroll_area, 1)
 
     def select_languages(self, source: str, target: str) -> None:
         source_index = self.source_combo.findData(source)

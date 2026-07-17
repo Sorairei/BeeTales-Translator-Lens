@@ -5,17 +5,20 @@ from PySide6.QtWidgets import (
 )
 
 from beetales_translator_lens.storage.settings_store import AppSettings
+from beetales_translator_lens.ui.widget_helpers import configure_combo_box
 
 
 class SettingsDialog(QDialog):
     def __init__(self, settings: AppSettings, parent=None) -> None:  # type: ignore[no-untyped-def]
         super().__init__(parent)
         self.setWindowTitle("BeeTales Settings")
+        self.resize(540, 500)
         root = QVBoxLayout(self)
         form = QFormLayout()
         self.theme_combo = QComboBox()
         self.theme_combo.addItem("Dark", "dark")
         self.theme_combo.addItem("Light", "light")
+        configure_combo_box(self.theme_combo, minimum_width=180)
         self.theme_combo.setCurrentIndex(max(0, self.theme_combo.findData(settings.theme)))
         self.start_minimized = QCheckBox("Start in the system tray")
         self.start_minimized.setChecked(settings.start_minimized)

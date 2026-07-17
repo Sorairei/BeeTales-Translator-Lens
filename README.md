@@ -6,6 +6,8 @@ BeeTales Translator Lens is a privacy-focused Windows desktop application that r
 
 **Phase 7 — Distribution** is implemented.
 
+Version 0.6.1 fixes packaged startup logging and makes every language, capture, settings, wizard, and model-management drop-down DPI-safe. Compact panel layouts now scroll instead of compressing or overlapping controls.
+
 Available now:
 
 - Transparent, frameless, always-on-top capture lens that can be moved, resized, and locked.
@@ -48,8 +50,8 @@ Available now:
 
 ### Portable Windows package
 
-1. Download `BeeTales-Translator-Lens-0.6.0-Windows-x64.zip` and its `.sha256` file.
-2. Optionally verify the archive with `Get-FileHash .\BeeTales-Translator-Lens-0.6.0-Windows-x64.zip -Algorithm SHA256`.
+1. Download `BeeTales-Translator-Lens-0.6.1-Windows-x64.zip` and its `.sha256` file.
+2. Optionally verify the archive with `Get-FileHash .\BeeTales-Translator-Lens-0.6.1-Windows-x64.zip -Algorithm SHA256`.
 3. Extract the complete ZIP to a writable folder.
 4. Run `BeeTalesTranslatorLens.exe` inside the extracted `BeeTales Translator Lens` folder.
 

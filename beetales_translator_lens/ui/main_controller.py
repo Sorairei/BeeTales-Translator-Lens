@@ -151,10 +151,25 @@ class MainController(QObject):
     def _apply_geometry(widget, geometry: dict[str, int]) -> None:  # type: ignore[no-untyped-def]
         requested = QRect(geometry["x"], geometry["y"], geometry["width"], geometry["height"])
         screens = QGuiApplication.screens()
-        visible = any(screen.availableGeometry().intersects(requested) for screen in screens)
-        if not visible and screens:
-            area = screens[0].availableGeometry()
-            requested.moveTopLeft(area.topLeft() + QPoint(40, 40))
+        requested.setWidth(max(requested.width(), widget.minimumWidth()))
+        requested.setHeight(max(requested.height(), widget.minimumHeight()))
+        if screens:
+            screen = QGuiApplication.screenAt(requested.center())
+            if screen is None:
+                screen = max(
+                    screens,
+                    key=lambda candidate: (
+                        candidate.availableGeometry().intersected(requested).width()
+                        * candidate.availableGeometry().intersected(requested).height()
+                    ),
+                )
+            area = screen.availableGeometry()
+            requested.setWidth(min(requested.width(), area.width()))
+            requested.setHeight(min(requested.height(), area.height()))
+            maximum_x = area.right() - requested.width() + 1
+            maximum_y = area.bottom() - requested.height() + 1
+            requested.moveLeft(min(max(requested.left(), area.left()), maximum_x))
+            requested.moveTop(min(max(requested.top(), area.top()), maximum_y))
         widget.setGeometry(requested)
 
     def show(self) -> None:

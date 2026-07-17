@@ -12,6 +12,7 @@ QWidget#translationPanel, QWidget#toolbarSurface {
     border-radius: 10px;
 }
 QWidget#titleBar { background-color: #2c352f; border-radius: 8px; }
+QScrollArea#panelScrollArea, QWidget#panelBody { background: transparent; border: none; }
 QLabel#appTitle { font-size: 11pt; font-weight: 600; color: #f4f8f5; }
 QLabel#sectionTitle { color: #9eb7a5; font-weight: 600; }
 QLabel#statusActive { color: #78c58e; font-weight: 600; }
@@ -28,8 +29,10 @@ QComboBox, QPushButton {
     border: 1px solid #53665a;
     border-radius: 6px;
     min-height: 27px;
-    padding: 2px 9px;
 }
+QPushButton { padding: 2px 9px; }
+QComboBox { padding: 2px 28px 2px 9px; }
+QComboBox::drop-down { width: 24px; border-left: 1px solid #53665a; }
 QComboBox:hover, QPushButton:hover { border-color: #78ad87; background-color: #37443b; }
 QPushButton:pressed { background-color: #26322a; }
 QPushButton:checked { background-color: #456a50; border-color: #85c797; }
@@ -46,6 +49,7 @@ QWidget#translationPanel, QWidget#toolbarSurface {
     background-color: #f2f6f3; border: 1px solid #829789; border-radius: 10px;
 }
 QWidget#titleBar { background-color: #dfe9e2; border-radius: 8px; }
+QScrollArea#panelScrollArea, QWidget#panelBody { background: transparent; border: none; }
 QLabel#appTitle { font-size: 11pt; font-weight: 600; color: #152219; }
 QLabel#sectionTitle { color: #42624b; font-weight: 600; }
 QLabel#statusActive { color: #287b3f; font-weight: 600; }
@@ -53,8 +57,11 @@ QLabel#statusPaused { color: #9a651c; font-weight: 600; }
 QTextEdit { background-color: white; border: 1px solid #a8b7ad; border-radius: 6px; padding: 7px; }
 QComboBox, QPushButton, QLineEdit, QSpinBox {
     background-color: #e8efe9; border: 1px solid #96a99b; border-radius: 6px;
-    min-height: 27px; padding: 2px 9px;
+    min-height: 27px;
 }
+QPushButton, QLineEdit, QSpinBox { padding: 2px 9px; }
+QComboBox { padding: 2px 28px 2px 9px; }
+QComboBox::drop-down { width: 24px; border-left: 1px solid #96a99b; }
 QComboBox:hover, QPushButton:hover { border-color: #4e8d5e; background-color: #dce9df; }
 QPushButton:checked { background-color: #b8d4bf; border-color: #4e8d5e; }
 QPushButton#accentButton { background-color: #5b9368; color: white; font-weight: 600; }

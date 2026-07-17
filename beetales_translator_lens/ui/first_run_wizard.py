@@ -3,6 +3,7 @@
 from PySide6.QtWidgets import QComboBox, QLabel, QVBoxLayout, QWizard, QWizardPage
 
 from beetales_translator_lens.constants import APP_NAME, SOURCE_LANGUAGES, TARGET_LANGUAGES
+from beetales_translator_lens.ui.widget_helpers import configure_combo_box
 
 
 class FirstRunWizard(QWizard):
@@ -10,6 +11,7 @@ class FirstRunWizard(QWizard):
         super().__init__()
         self.setWindowTitle(f"Welcome to {APP_NAME}")
         self.setWizardStyle(QWizard.ModernStyle)
+        self.resize(560, 380)
         welcome = QWizardPage()
         welcome.setTitle(f"Welcome to {APP_NAME}")
         layout = QVBoxLayout(welcome)
@@ -29,12 +31,14 @@ class FirstRunWizard(QWizard):
         self.source_combo = QComboBox()
         for code, name in SOURCE_LANGUAGES:
             self.source_combo.addItem(name, code)
+        configure_combo_box(self.source_combo, minimum_width=240)
         self.source_combo.setCurrentIndex(max(0, self.source_combo.findData(source)))
         language_layout.addWidget(self.source_combo)
         language_layout.addWidget(QLabel("Target language"))
         self.target_combo = QComboBox()
         for code, name in TARGET_LANGUAGES:
             self.target_combo.addItem(name, code)
+        configure_combo_box(self.target_combo, minimum_width=240)
         self.target_combo.setCurrentIndex(max(0, self.target_combo.findData(target)))
         language_layout.addWidget(self.target_combo)
         self.addPage(languages)

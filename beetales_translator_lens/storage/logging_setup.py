@@ -11,7 +11,7 @@ from pathlib import Path
 from beetales_translator_lens.storage.paths import ensure_data_directories
 
 
-@dataclass(slots=True)
+@dataclass(slots=True, weakref_slot=True)
 class LogManager:
     listener: logging.handlers.QueueListener
     queue_handler: logging.Handler
