@@ -27,3 +27,16 @@ def test_least_recently_used_entry_is_evicted() -> None:
     assert cache.get("en", "es", "one") is not None
     assert cache.get("en", "es", "two") is None
     assert len(cache) == 2
+
+
+def test_snapshot_can_restore_a_bounded_cache() -> None:
+    source = TranslationCache(maximum_entries=3)
+    for index in range(3):
+        source.put(result(str(index)))
+
+    restored = TranslationCache(maximum_entries=2)
+    restored.load(source.snapshot())
+
+    assert len(restored) == 2
+    assert restored.get("en", "es", "0") is None
+    assert restored.get("en", "es", "2") is not None

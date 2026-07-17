@@ -115,6 +115,37 @@ def test_invalid_translation_cache_size_uses_default(tmp_path: Path) -> None:
     assert SettingsStore(path).load().translation_cache_size == 500
 
 
+def test_persistent_cache_requires_history(tmp_path: Path) -> None:
+    path = tmp_path / "settings.json"
+    path.write_text(
+        json.dumps({"history_enabled": False, "persistent_cache_enabled": True}),
+        encoding="utf-8",
+    )
+
+    settings = SettingsStore(path).load()
+
+    assert settings.history_enabled is False
+    assert settings.persistent_cache_enabled is False
+
+
+def test_history_preferences_are_persisted(tmp_path: Path) -> None:
+    path = tmp_path / "settings.json"
+    store = SettingsStore(path)
+    store.save(
+        AppSettings(
+            history_enabled=True,
+            persistent_cache_enabled=True,
+            history_max_entries=250,
+        )
+    )
+
+    settings = store.load()
+
+    assert settings.history_enabled is True
+    assert settings.persistent_cache_enabled is True
+    assert settings.history_max_entries == 250
+
+
 def test_corrupt_file_is_backed_up_and_defaults_are_restored(tmp_path: Path) -> None:
     path = tmp_path / "settings.json"
     path.write_text("{not valid json", encoding="utf-8")

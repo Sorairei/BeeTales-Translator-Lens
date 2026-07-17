@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import logging
 import sys
+from time import perf_counter
 
 from PySide6.QtCore import QObject, QPoint, QRect, QThreadPool, QTimer, Qt
 from PySide6.QtGui import QGuiApplication, QImage, QPixmap
@@ -13,8 +15,11 @@ from beetales_translator_lens.capture.image_preprocessor import ImagePreprocesso
 from beetales_translator_lens.constants import APP_NAME, LensState
 from beetales_translator_lens.ocr.models import OCRResult
 from beetales_translator_lens.ocr.paddle_engine import PaddleOCREngine
+from beetales_translator_lens.performance import PipelinePerformanceMonitor
 from beetales_translator_lens.platform.windows_capture_exclusion import exclude_window_from_capture
+from beetales_translator_lens.storage.history_store import HistoryStore
 from beetales_translator_lens.storage.settings_store import SettingsStore
+from beetales_translator_lens.storage.translation_cache_store import TranslationCacheStore
 from beetales_translator_lens.translation.argos_engine import ArgosTranslationEngine
 from beetales_translator_lens.translation.language_detector import LanguageDetector
 from beetales_translator_lens.translation.model_manager import ArgosModelManager, ModelInstallResult
@@ -26,11 +31,17 @@ from beetales_translator_lens.ui.translation_panel import TranslationPanel
 from beetales_translator_lens.workers.capture_worker import CaptureTask, FrameAnalysis
 from beetales_translator_lens.workers.ocr_worker import OCRTask
 from beetales_translator_lens.workers.model_download_worker import ModelDownloadTask
+from beetales_translator_lens.workers.persistence_worker import (
+    ClearSavedDataTask,
+    SaveTranslationTask,
+)
 from beetales_translator_lens.workers.translation_worker import (
     TranslationPreparation,
     TranslationPreparationTask,
     TranslationTask,
 )
+
+LOGGER = logging.getLogger(__name__)
 
 
 class MainController(QObject):
@@ -44,6 +55,8 @@ class MainController(QObject):
         self.overlay = CaptureOverlay()
         self.panel = TranslationPanel()
         self.thread_pool = QThreadPool.globalInstance()
+        self.persistence_pool = QThreadPool(self)
+        self.persistence_pool.setMaxThreadCount(1)
         self.detector = ChangeDetector(self.settings.change_sensitivity)
         self.preprocessor = ImagePreprocessor()
         self.ocr_engine = PaddleOCREngine()
@@ -54,6 +67,11 @@ class MainController(QObject):
         self.route_resolver = TranslationRouteResolver()
         self.model_manager = ArgosModelManager(route_resolver=self.route_resolver)
         self.translation_cache = TranslationCache(self.settings.translation_cache_size)
+        self.history_store = HistoryStore(maximum_entries=self.settings.history_max_entries)
+        self.translation_cache_store = TranslationCacheStore()
+        if self.settings.history_enabled and self.settings.persistent_cache_enabled:
+            self.translation_cache.load(self.translation_cache_store.load())
+        self.performance = PipelinePerformanceMonitor()
         self.capture_timer = QTimer(self)
         self.capture_timer.setTimerType(Qt.PreciseTimer)
         self.capture_timer.timeout.connect(self.request_capture)
@@ -67,6 +85,9 @@ class MainController(QObject):
         self._latest_analysis: FrameAnalysis | None = None
         self._latest_ocr_result: OCRResult | None = None
         self._pending_translation: TranslationPreparation | None = None
+        self._cycle_started: float | None = None
+        self._latest_metrics_text = ""
+        self._background_tasks: set[object] = set()
         self._connect_signals()
         self._restore_settings()
 
@@ -79,6 +100,9 @@ class MainController(QObject):
         self.panel.language_changed.connect(self._language_changed)
         self.panel.capture_settings_changed.connect(self._capture_settings_changed)
         self.panel.swap_requested.connect(self.swap_languages)
+        self.panel.clear_requested.connect(self.clear_result)
+        self.panel.privacy_settings_changed.connect(self._privacy_settings_changed)
+        self.panel.clear_saved_data_requested.connect(self.clear_saved_data)
         self.overlay.geometry_changed.connect(self._capture_geometry_changed)
         self.app.aboutToQuit.connect(self.save_settings)
 
@@ -90,6 +114,10 @@ class MainController(QObject):
             self.settings.capture_interval_ms,
             self.settings.change_sensitivity,
             self.settings.preprocessing_profile,
+        )
+        self.panel.select_privacy_settings(
+            self.settings.history_enabled,
+            self.settings.persistent_cache_enabled,
         )
         self.overlay.set_locked(self.settings.overlay_locked)
         self.panel.lock_button.setChecked(self.settings.overlay_locked)
@@ -184,13 +212,19 @@ class MainController(QObject):
     def request_capture(self, force: bool = False) -> None:
         """Schedule at most one task and discard overlapping ticks."""
 
-        if self._closing or self._paused or not self._running or self._processing:
+        if self._closing or self._paused or not self._running:
+            return
+        self.performance.record_request()
+        if self._processing:
+            self.performance.record_busy_skip()
+            self._refresh_metrics()
             return
         region = self.overlay.capture_region()
         if not region.is_valid:
             self._capture_failed("The selected area is too small.")
             return
         self._processing = True
+        self._cycle_started = perf_counter()
         self.overlay.set_state(LensState.CAPTURING)
         self.panel.set_status("Reading the selected area…")
         if sys.platform == "win32" and not self._capture_exclusion_ok:
@@ -201,7 +235,7 @@ class MainController(QObject):
 
     def _submit_capture(self, region, force: bool) -> None:  # type: ignore[no-untyped-def]
         if self._closing:
-            self._processing = False
+            self._finish_cycle()
             self._set_overlays_temporarily_hidden(False)
             return
         task = CaptureTask(
@@ -241,7 +275,7 @@ class MainController(QObject):
             self._active_task = task
             self.thread_pool.start(task)
         else:
-            self._processing = False
+            self._finish_cycle(unchanged=True)
             self.panel.set_status(
                 f"No changes ({analysis.change.changed_ratio * 100:.1f}%)"
             )
@@ -253,17 +287,18 @@ class MainController(QObject):
             return
         analysis = self._latest_analysis
         if result.error:
+            LOGGER.error("OCR cycle failed: %s", result.error)
             self.panel.set_status(result.error, paused=True)
             self.overlay.set_state(LensState.ERROR)
             self._update_metrics(result, analysis)
-            self._processing = False
+            self._finish_cycle()
             return
         if not result.full_text.strip():
             self.panel.clear_result()
             self.panel.set_status("No readable text was detected.", paused=True)
             self.overlay.set_state(LensState.ACTIVE)
             self._update_metrics(result, analysis)
-            self._processing = False
+            self._finish_cycle()
             return
         self._latest_ocr_result = result
         self._update_metrics(result, analysis)
@@ -288,20 +323,21 @@ class MainController(QObject):
             return
         self._pending_translation = preparation
         if preparation.detection is not None:
-            self.panel.metrics_label.setText(
-                f"{self.panel.metrics_label.text()} · Detection: "
+            self._latest_metrics_text = (
+                f"{self._latest_metrics_text} · Detection: "
                 f"{preparation.detection.elapsed_ms:.0f} ms "
                 f"({preparation.detection.confidence:.0%})"
             )
+            self._refresh_metrics()
         if preparation.normalized_text:
             self.panel.set_detected_text(preparation.normalized_text)
         if preparation.error:
-            self._processing = False
+            self._finish_cycle()
             self.panel.set_status(preparation.error, paused=True)
             self.overlay.set_state(LensState.ERROR)
             return
         if preparation.source_language is None:
-            self._processing = False
+            self._finish_cycle()
             self.panel.set_status("The source language could not be resolved.", paused=True)
             self.overlay.set_state(LensState.ERROR)
             return
@@ -312,14 +348,16 @@ class MainController(QObject):
             preparation.normalized_text,
         )
         if cached is not None:
-            self._processing = False
+            self.performance.record_cache_hit()
             self._display_translation(cached, cached=True)
+            self._finish_cycle()
             return
         if preparation.route is not None:
             self._start_translation(preparation.normalized_text, preparation.route)
             return
 
-        self._processing = False
+        self._finish_cycle()
+        self._processing = True
         self.overlay.set_state(LensState.ERROR)
         answer = QMessageBox.question(
             self.panel,
@@ -330,12 +368,13 @@ class MainController(QObject):
             QMessageBox.No,
         )
         if answer != QMessageBox.Yes:
+            self._processing = False
             self.panel.set_status(
                 f"Model not installed for {preparation.source_language} → {preparation.target_language}.",
                 paused=True,
             )
             return
-        self._processing = True
+        self._cycle_started = perf_counter()
         self.overlay.set_state(LensState.DOWNLOADING_MODEL)
         self.panel.set_status("Checking available translation models…")
         task = ModelDownloadTask(
@@ -354,13 +393,14 @@ class MainController(QObject):
             self._processing = False
             return
         if result.error:
-            self._processing = False
+            LOGGER.error("Translation model installation failed: %s", result.error)
+            self._finish_cycle()
             self.panel.set_status(result.error, paused=True)
             self.overlay.set_state(LensState.ERROR)
             return
         preparation = self._pending_translation
         if preparation is None or not result.route:
-            self._processing = False
+            self._finish_cycle()
             self.panel.set_status("The translation model was installed, but no route was returned.", paused=True)
             self.overlay.set_state(LensState.ERROR)
             return
@@ -368,6 +408,8 @@ class MainController(QObject):
 
     def _start_translation(self, text: str, route: list[str]) -> None:
         self._processing = True
+        if self._cycle_started is None:
+            self._cycle_started = perf_counter()
         self.overlay.set_state(LensState.TRANSLATING)
         route_text = " → ".join(route)
         self.panel.set_status(f"Translating locally via {route_text}…")
@@ -377,23 +419,26 @@ class MainController(QObject):
         self.thread_pool.start(task)
 
     def _translation_completed(self, result: TranslationResult) -> None:
-        self._processing = False
         self._active_task = None
         if self._closing:
             return
         if result.error:
+            LOGGER.error("Translation cycle failed: %s", result.error)
             self.panel.set_status(result.error, paused=True)
             self.overlay.set_state(LensState.ERROR)
+            self._finish_cycle()
             return
         self.translation_cache.put(result)
         self._display_translation(result)
+        self._schedule_persistence(result)
+        self._finish_cycle()
 
     def _display_translation(self, result: TranslationResult, *, cached: bool = False) -> None:
         self.panel.original_text.setPlainText(result.original_text)
         self.panel.translated_text.setPlainText(result.translated_text)
         pivot = len(result.route) > 2
         if cached:
-            status = "Translation loaded from session cache"
+            status = "Translation loaded from cache"
         elif pivot:
             status = "Translation completed through English"
         else:
@@ -401,10 +446,11 @@ class MainController(QObject):
         self.panel.set_status(f"{status} · {result.elapsed_ms:.0f} ms")
         self.overlay.set_state(LensState.ACTIVE)
         if self._latest_ocr_result is not None:
-            current = self.panel.metrics_label.text()
-            self.panel.metrics_label.setText(
-                f"{current} · Translation: {result.elapsed_ms:.0f} ms · Route: {' → '.join(result.route)}"
+            self._latest_metrics_text = (
+                f"{self._latest_metrics_text} · Translation: "
+                f"{result.elapsed_ms:.0f} ms · Route: {' → '.join(result.route)}"
             )
+            self._refresh_metrics()
 
     def _update_metrics(
         self,
@@ -412,22 +458,116 @@ class MainController(QObject):
         analysis: FrameAnalysis | None,
     ) -> None:
         if analysis is None:
-            self.panel.metrics_label.setText(f"OCR: {result.elapsed_ms:.0f} ms")
+            self._latest_metrics_text = f"OCR: {result.elapsed_ms:.0f} ms"
+            self._refresh_metrics()
             return
         total = analysis.capture.elapsed_ms + analysis.preprocessing_ms + result.elapsed_ms
-        self.panel.metrics_label.setText(
+        self._latest_metrics_text = (
             f"Capture: {analysis.capture.elapsed_ms:.0f} ms · "
             f"Preprocess: {analysis.preprocessing_ms:.0f} ms · "
             f"OCR: {result.elapsed_ms:.0f} ms · Total: {total:.0f} ms · "
             f"Confidence: {result.average_confidence:.0%}"
         )
+        self._refresh_metrics()
 
     def _capture_failed(self, message: str) -> None:
-        self._processing = False
+        LOGGER.error("Capture cycle failed: %s", message)
         self._active_task = None
         self._set_overlays_temporarily_hidden(False)
         self.panel.set_status(message, paused=True)
         self.overlay.set_state(LensState.ERROR)
+        self._finish_cycle()
+
+    def _finish_cycle(self, *, unchanged: bool = False) -> None:
+        self._processing = False
+        if self._cycle_started is not None:
+            elapsed_ms = (perf_counter() - self._cycle_started) * 1000
+            self.performance.record_completed_cycle(elapsed_ms, unchanged=unchanged)
+            self._cycle_started = None
+        self._refresh_metrics()
+
+    def _refresh_metrics(self) -> None:
+        snapshot = self.performance.snapshot()
+        performance_text = (
+            f"Average cycle: {snapshot.average_cycle_ms:.0f} ms · "
+            f"Cache hits: {snapshot.cache_hits} · Busy ticks skipped: {snapshot.skipped_busy_ticks}"
+        )
+        if self._latest_metrics_text:
+            performance_text = f"{self._latest_metrics_text} · {performance_text}"
+        self.panel.metrics_label.setText(performance_text)
+
+    def _schedule_persistence(self, result: TranslationResult) -> None:
+        save_history = self.settings.history_enabled
+        save_cache = save_history and self.settings.persistent_cache_enabled
+        if not save_history and not save_cache:
+            return
+        task = SaveTranslationTask(
+            result,
+            self.history_store,
+            self.translation_cache_store,
+            self.translation_cache.snapshot(),
+            save_history=save_history,
+            save_cache=save_cache,
+        )
+        self._background_tasks.add(task)
+        task.signals.completed.connect(
+            lambda message, current=task: self._persistence_completed(current, message)
+        )
+        self.persistence_pool.start(task)
+
+    def _persistence_completed(
+        self,
+        task: object,
+        message: str,
+        success_status: str | None = None,
+    ) -> None:
+        self._background_tasks.discard(task)
+        if message:
+            LOGGER.warning("%s", message)
+            if not self._processing:
+                self.panel.set_status(message, paused=True)
+        elif success_status and not self._processing:
+            self.panel.set_status(success_status)
+
+    def clear_result(self) -> None:
+        self.panel.clear_result()
+        self._latest_ocr_result = None
+        self._pending_translation = None
+        self._latest_metrics_text = ""
+        self._refresh_metrics()
+        self.panel.set_status("Displayed text cleared")
+
+    def _privacy_settings_changed(self) -> None:
+        history_enabled, persistent_cache_enabled = self.panel.selected_privacy_settings()
+        self.settings.history_enabled = history_enabled
+        self.settings.persistent_cache_enabled = persistent_cache_enabled
+        self.save_settings()
+        if history_enabled:
+            self.panel.set_status("Local translation history enabled")
+        else:
+            self.panel.set_status("Translation history disabled")
+
+    def clear_saved_data(self) -> None:
+        answer = QMessageBox.question(
+            self.panel,
+            APP_NAME,
+            "Clear all saved translation history and the persistent translation cache?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        if answer != QMessageBox.Yes:
+            return
+        self.translation_cache.clear()
+        task = ClearSavedDataTask(self.history_store, self.translation_cache_store)
+        self._background_tasks.add(task)
+        task.signals.completed.connect(
+            lambda message, current=task: self._persistence_completed(
+                current,
+                message,
+                "Saved translation data cleared",
+            )
+        )
+        self.persistence_pool.start(task)
 
     def _set_overlays_temporarily_hidden(self, hidden: bool) -> None:
         if hidden and not self._fallback_hidden:
@@ -522,6 +662,9 @@ class MainController(QObject):
         self.settings.capture_interval_ms = interval
         self.settings.change_sensitivity = sensitivity
         self.settings.preprocessing_profile = profile
+        history_enabled, persistent_cache_enabled = self.panel.selected_privacy_settings()
+        self.settings.history_enabled = history_enabled
+        self.settings.persistent_cache_enabled = persistent_cache_enabled
         self.settings.overlay_locked = self.overlay.is_locked()
         self.settings.overlay_geometry = self._rect_mapping(self.overlay)
         self.settings.panel_geometry = self._rect_mapping(self.panel)
@@ -537,6 +680,7 @@ class MainController(QObject):
         self.panel.close()
         self.thread_pool.clear()
         self.thread_pool.waitForDone(2000)
+        self.persistence_pool.waitForDone(2000)
         self.ocr_engine.clear()
         self.translation_cache.clear()
         self.app.quit()

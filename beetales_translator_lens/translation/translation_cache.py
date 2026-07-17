@@ -29,5 +29,17 @@ class TranslationCache:
     def clear(self) -> None:
         self._values.clear()
 
+    def load(self, results: list[TranslationResult]) -> None:
+        """Populate the cache while retaining its configured LRU limit."""
+
+        for result in results[-self.maximum_entries :]:
+            if result.succeeded:
+                self.put(result)
+
+    def snapshot(self) -> list[TranslationResult]:
+        """Return cache entries from least to most recently used."""
+
+        return list(self._values.values())
+
     def __len__(self) -> int:
         return len(self._values)

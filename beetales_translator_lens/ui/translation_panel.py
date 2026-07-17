@@ -5,6 +5,7 @@ from __future__ import annotations
 from PySide6.QtCore import QPoint, Qt, Signal
 from PySide6.QtGui import QMouseEvent
 from PySide6.QtWidgets import (
+    QCheckBox,
     QComboBox,
     QGridLayout,
     QHBoxLayout,
@@ -29,6 +30,9 @@ class TranslationPanel(QWidget):
     language_changed = Signal()
     capture_settings_changed = Signal()
     swap_requested = Signal()
+    clear_requested = Signal()
+    privacy_settings_changed = Signal()
+    clear_saved_data_requested = Signal()
 
     def __init__(self) -> None:
         super().__init__()
@@ -134,6 +138,7 @@ class TranslationPanel(QWidget):
         self.pause_button = QPushButton("Pause")
         self.pause_button.setEnabled(False)
         self.copy_button = QPushButton("Copy")
+        self.clear_button = QPushButton("Clear")
         self.swap_button = QPushButton("Swap")
         self.lock_button = QPushButton("Lock lens")
         self.lock_button.setCheckable(True)
@@ -143,6 +148,7 @@ class TranslationPanel(QWidget):
             self.start_button,
             self.pause_button,
             self.copy_button,
+            self.clear_button,
             self.swap_button,
             self.lock_button,
             self.preview_button,
@@ -151,9 +157,29 @@ class TranslationPanel(QWidget):
         self.start_button.clicked.connect(self.start_requested)
         self.pause_button.clicked.connect(self.pause_requested)
         self.copy_button.clicked.connect(self.copy_requested)
+        self.clear_button.clicked.connect(self.clear_requested)
         self.swap_button.clicked.connect(self.swap_requested)
         self.lock_button.clicked.connect(self.lock_requested)
         root.addLayout(controls)
+
+        privacy_controls = QHBoxLayout()
+        self.history_checkbox = QCheckBox("Save translation history")
+        self.history_checkbox.setToolTip(
+            "Store original and translated text locally. Captured images are never saved."
+        )
+        self.persistent_cache_checkbox = QCheckBox("Persistent translation cache")
+        self.persistent_cache_checkbox.setToolTip(
+            "Reuse translations after restarting. This requires translation history to be enabled."
+        )
+        self.clear_saved_data_button = QPushButton("Clear saved data")
+        privacy_controls.addWidget(self.history_checkbox)
+        privacy_controls.addWidget(self.persistent_cache_checkbox)
+        privacy_controls.addStretch()
+        privacy_controls.addWidget(self.clear_saved_data_button)
+        self.history_checkbox.toggled.connect(self._history_toggled)
+        self.persistent_cache_checkbox.toggled.connect(self.privacy_settings_changed)
+        self.clear_saved_data_button.clicked.connect(self.clear_saved_data_requested)
+        root.addLayout(privacy_controls)
 
         self.preview_label = QLabel("The latest capture will appear here.")
         self.preview_label.setAlignment(Qt.AlignCenter)
@@ -212,6 +238,31 @@ class TranslationPanel(QWidget):
             str(self.sensitivity_combo.currentData()),
             str(self.profile_combo.currentData()),
         )
+
+    def select_privacy_settings(self, history_enabled: bool, persistent_cache_enabled: bool) -> None:
+        history_blocked = self.history_checkbox.blockSignals(True)
+        cache_blocked = self.persistent_cache_checkbox.blockSignals(True)
+        try:
+            self.history_checkbox.setChecked(history_enabled)
+            self.persistent_cache_checkbox.setEnabled(history_enabled)
+            self.persistent_cache_checkbox.setChecked(history_enabled and persistent_cache_enabled)
+        finally:
+            self.history_checkbox.blockSignals(history_blocked)
+            self.persistent_cache_checkbox.blockSignals(cache_blocked)
+
+    def selected_privacy_settings(self) -> tuple[bool, bool]:
+        history_enabled = self.history_checkbox.isChecked()
+        return history_enabled, history_enabled and self.persistent_cache_checkbox.isChecked()
+
+    def _history_toggled(self, enabled: bool) -> None:
+        self.persistent_cache_checkbox.setEnabled(enabled)
+        if not enabled:
+            blocked = self.persistent_cache_checkbox.blockSignals(True)
+            try:
+                self.persistent_cache_checkbox.setChecked(False)
+            finally:
+                self.persistent_cache_checkbox.blockSignals(blocked)
+        self.privacy_settings_changed.emit()
 
     def set_status(self, text: str, paused: bool = False) -> None:
         self.status_label.setText(f"● {text}")

@@ -37,6 +37,8 @@ class AppSettings:
     translation_panel_position: str = "bottom"
     click_through: bool = False
     history_enabled: bool = False
+    persistent_cache_enabled: bool = False
+    history_max_entries: int = 1000
     overlay_locked: bool = False
     auto_detect_language: bool = False
     ocr_model_download_consent: bool = False
@@ -67,6 +69,7 @@ class AppSettings:
             "show_original_text",
             "click_through",
             "history_enabled",
+            "persistent_cache_enabled",
             "overlay_locked",
             "auto_detect_language",
             "ocr_model_download_consent",
@@ -83,6 +86,13 @@ class AppSettings:
         cache_size = data.get("translation_cache_size")
         if isinstance(cache_size, int) and 10 <= cache_size <= 10_000:
             defaults.translation_cache_size = cache_size
+
+        history_max_entries = data.get("history_max_entries")
+        if isinstance(history_max_entries, int) and 10 <= history_max_entries <= 10_000:
+            defaults.history_max_entries = history_max_entries
+
+        if not defaults.history_enabled:
+            defaults.persistent_cache_enabled = False
 
         for key, allowed in {
             "change_sensitivity": {"low", "normal", "high"},
